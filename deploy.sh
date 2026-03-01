@@ -94,12 +94,10 @@ deploy_lightsail() {
   sed "s|root /usr/share/nginx/html;|root ${REMOTE_PATH};|g" \
     "${SCRIPT_DIR}/nginx.conf" | \
     ssh $SSH_OPTS "${SSH_USER}@${LIGHTSAIL_HOST}" \
-    "sudo tee /etc/nginx/sites-available/apps > /dev/null"
+    "sudo tee /etc/nginx/conf.d/default.conf > /dev/null"
 
   ssh $SSH_OPTS "${SSH_USER}@${LIGHTSAIL_HOST}" \
-    "sudo ln -sf /etc/nginx/sites-available/apps /etc/nginx/sites-enabled/ && \
-     sudo rm -f /etc/nginx/sites-enabled/default && \
-     sudo nginx -t && sudo systemctl reload nginx"
+    "sudo nginx -t && sudo systemctl reload nginx"
 
   echo ""
   echo "✅ 部署成功！"
