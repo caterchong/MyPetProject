@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>二进制转换 — 数学趣味游戏</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .mode-toggle { display:flex; background:var(--bg); border-radius:12px; padding:4px; gap:4px; margin-bottom:10px; }
+    .mode-toggle-btn { flex:1; padding:10px; border:none; border-radius:9px; font-size:14px; font-weight:700; cursor:pointer; color:var(--muted); background:transparent; transition:all .2s; }
+    .mode-toggle-btn.active { background:#fff; color:var(--primary); box-shadow:0 2px 8px rgba(0,0,0,.08); }
+    .big-display { font-size:40px; font-weight:900; text-align:center; color:var(--primary-dark); background:var(--bg); border-radius:14px; padding:16px; margin:8px 0; letter-spacing:4px; word-break:break-all; }
+    .direction-label { font-size:13px; color:var(--muted); text-align:center; margin-bottom:6px; }
+    .feedback-flash { font-size:24px; font-weight:800; text-align:center; height:32px; line-height:32px; }
+    .feedback-flash.ok { color:var(--success); }
+    .feedback-flash.no { color:var(--danger); }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="toast" id="toast"></div>
+  <div class="game-header">
+    <a class="btn-back" href="../index.html">← 返回</a>
+    <span class="game-header-title">💻 二进制转换</span>
+    <span class="score-badge" id="score-badge">0 题</span>
+  </div>
+  <div class="main-content">
+    <div class="game-area">
+
+      <div class="game-intro-card" id="intro-card">
+        <h2>💻 二进制转换</h2>
+        <p>在十进制和二进制之间快速转换。<br><br>
+          <strong>模式A</strong>：看十进制，输入对应的二进制<br>
+          <strong>模式B</strong>：看二进制，输入对应的十进制<br><br>
+          60秒内答对越多越好！</p>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="openHistory()">📋 历史记录</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="startGame()">开始转换</button>
+        </div>
+      </div>
+
+      <div class="game-play-card hidden" id="play-card">
+        <div class="stats-row" style="margin-bottom:8px;">
+          <div class="stat-box"><div class="stat-val" id="time-left" style="color:var(--danger);">60</div><div class="stat-label">剩余秒</div></div>
+          <div class="stat-box"><div class="stat-val" id="correct-val">0</div><div class="stat-label">答对</div></div>
+          <div class="stat-box"><div class="stat-val" id="wrong-val" style="color:var(--danger);">0</div><div class="stat-label">答错</div></div>
+        </div>
+        <div class="timer-bar-wrap"><div class="timer-bar" id="timer-bar"></div></div>
+        <div class="mode-toggle">
+          <button class="mode-toggle-btn active" id="btn-mode-a" onclick="switchMode('a')">十→二</button>
+          <button class="mode-toggle-btn" id="btn-mode-b" onclick="switchMode('b')">二→十</button>
+        </div>
+        <div class="direction-label" id="dir-label">将下列十进制转为二进制</div>
+        <div class="big-display" id="number-display">0</div>
+        <div class="feedback-flash" id="feedback">&nbsp;</div>
+        <div class="input-group">
+          <input class="game-input" id="ans-input" placeholder="输入答案" autocomplete="off"
+            onkeydown="if(event.key==='Enter')submitAnswer()">
+          <button class="btn btn-primary" style="width:auto;padding:0 18px;" onclick="submitAnswer()">确定</button>
+        </div>
+      </div>
+
+      <div class="game-result-card hidden" id="result-card">
+        <div class="result-title">⏰ 时间到！</div>
+        <div class="result-score" id="result-score">0</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:4px;">题</div>
+        <div class="result-record hidden" id="result-record">🏆 新纪录！</div>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="startGame()">再来</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="window.location.href='../index.html'">返回大厅</button>
+        </div>
+        <div class="mt16" id="history-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="modal-mask" id="history-modal" onclick="closeHistory(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header"><span class="modal-title">📋 历史记录</span><button class="modal-close" onclick="closeHistory()">✕</button></div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+</div>
+<script src="../js/storage.js"></script>
+<script>
+  const GAME_ID = 'binary-convert';
+  const TOTAL = 60;
+  let mode = 'a', correct = 0, wrong = 0, timeLeft = TOTAL, timerInterval = null;
+  let currentDec = 0;
+
+  function switchMode(m) {
+    mode = m;
+    ['a','b'].forEach(x => document.getElementById('btn-mode-'+x).classList.toggle('active', x===m));
+    document.getElementById('dir-label').textContent = m==='a' ? '将下列十进制转为二进制' : '将下列二进制转为十进制';
+    document.getElementById('ans-input').type = m==='b' ? 'number' : 'text';
+    document.getElementById('ans-input').inputMode = m==='b' ? 'numeric' : 'text';
+  }
+
+  function startGame() {
+    correct=0; wrong=0; timeLeft=TOTAL;
+    clearInterval(timerInterval);
+    ['correct-val','wrong-val'].forEach(id=>document.getElementById(id).textContent='0');
+    document.getElementById('time-left').textContent=TOTAL;
+    document.getElementById('timer-bar').style.width='100%';
+    document.getElementById('feedback').innerHTML='&nbsp;';
+    document.getElementById('score-badge').textContent='0 题';
+    document.getElementById('intro-card').classList.add('hidden');
+    document.getElementById('result-card').classList.add('hidden');
+    document.getElementById('play-card').classList.remove('hidden');
+    switchMode(mode);
+    nextQuestion();
+    timerInterval = setInterval(()=>{
+      timeLeft--;
+      document.getElementById('time-left').textContent=timeLeft;
+      document.getElementById('timer-bar').style.width=(timeLeft/TOTAL*100)+'%';
+      if(timeLeft<=0){clearInterval(timerInterval);endGame();}
+    },1000);
+  }
+
+  function nextQuestion() {
+    currentDec = Math.floor(Math.random()*63)+1; // 1-63 (max 6 bits)
+    if(mode==='a') {
+      document.getElementById('number-display').textContent = currentDec;
+    } else {
+      document.getElementById('number-display').textContent = currentDec.toString(2);
+    }
+    document.getElementById('ans-input').value='';
+    document.getElementById('ans-input').focus();
+  }
+
+  function submitAnswer() {
+    const raw = document.getElementById('ans-input').value.trim();
+    if (!raw) return;
+    let userCorrect;
+    if (mode==='a') {
+      const expected = currentDec.toString(2);
+      userCorrect = raw === expected;
+    } else {
+      userCorrect = parseInt(raw,10) === currentDec;
+    }
+    const fb = document.getElementById('feedback');
+    if (userCorrect) {
+      correct++; document.getElementById('correct-val').textContent=correct;
+      document.getElementById('score-badge').textContent=correct+' 题';
+      fb.textContent='✓ 正确！'; fb.className='feedback-flash ok';
+    } else {
+      wrong++; document.getElementById('wrong-val').textContent=wrong;
+      const ans = mode==='a' ? currentDec.toString(2) : currentDec;
+      fb.textContent=`✗ 答案：${ans}`; fb.className='feedback-flash no';
+    }
+    setTimeout(()=>{fb.innerHTML='&nbsp;';fb.className='feedback-flash';nextQuestion();},700);
+  }
+
+  function endGame(){
+    document.getElementById('play-card').classList.add('hidden');
+    document.getElementById('result-card').classList.remove('hidden');
+    document.getElementById('result-score').textContent=correct;
+    const isRecord=Storage.saveRecord(GAME_ID,{value:correct,label:`${correct}题`},'higher');
+    if(isRecord)document.getElementById('result-record').classList.remove('hidden');
+    const history=Storage.getHistory(GAME_ID);
+    if(history.length)document.getElementById('history-list').innerHTML='<div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted);">历史记录</div>'+history.slice(0,5).map(h=>`<div style="background:var(--bg);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;font-size:13px;"><span>${h.label}</span><span style="color:var(--muted)">${h.date}</span></div>`).join('');
+  }
+
+  const MEDALS=['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  function openHistory(){const h=Storage.getHistory(GAME_ID);const b=Storage.getRecord(GAME_ID);const body=document.getElementById('modal-body');if(!h.length){body.innerHTML='<div class="modal-empty">还没有记录！🎮</div>';}else{const bh=b?`<div style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:14px;font-weight:700;">🏆 最佳纪录</span><span style="font-size:20px;font-weight:800;">${b.label}</span></div>`:'';body.innerHTML=bh+h.map((x,i)=>`<div class="history-row"><span class="h-rank">${MEDALS[i]||i+1}</span><span class="h-val">${x.label}</span><span class="h-date">${x.date}</span></div>`).join('');}document.getElementById('history-modal').classList.add('open');}
+  function closeHistory(e){if(e&&e.target!==document.getElementById('history-modal'))return;document.getElementById('history-modal').classList.remove('open');}
+</script>
+</body>
+</html>

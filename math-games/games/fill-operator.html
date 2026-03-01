@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>填运算符 — 数学趣味游戏</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .equation-row { display:flex; align-items:center; justify-content:center; gap:6px; flex-wrap:wrap; margin:10px 0; }
+    .eq-num { font-size:28px; font-weight:800; color:var(--primary-dark); }
+    .eq-slot {
+      width:44px; height:44px; border:2px dashed #cbd5e1; border-radius:10px;
+      display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:700;
+      cursor:pointer; transition:all .15s; color:var(--primary); background:#fff;
+    }
+    .eq-slot.filled { border-style:solid; border-color:var(--primary); background:#ede9fe; }
+    .eq-slot.selected { border-color:var(--accent); background:#fdf4ff; }
+    .eq-result { font-size:22px; font-weight:700; color:var(--text); }
+    .op-palette { display:flex; gap:10px; justify-content:center; margin:8px 0; }
+    .op-palette-btn {
+      width:56px; height:56px; border-radius:14px; border:2px solid #e5e7eb;
+      background:#fff; font-size:24px; font-weight:700; cursor:pointer; color:var(--primary);
+      transition:all .15s;
+    }
+    .op-palette-btn:active { background:var(--primary); color:#fff; }
+    .level-progress { display:flex; gap:4px; justify-content:center; flex-wrap:wrap; margin:6px 0; }
+    .lp-dot { width:12px; height:12px; border-radius:50%; background:#e5e7eb; }
+    .lp-dot.done { background:var(--success); }
+    .lp-dot.current { background:var(--primary); }
+    .result-preview {
+      font-size:16px; text-align:center; color:var(--muted); margin:4px 0;
+      min-height:24px;
+    }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="toast" id="toast"></div>
+  <div class="game-header">
+    <a class="btn-back" href="../index.html">← 返回</a>
+    <span class="game-header-title">➕ 填运算符</span>
+    <span class="score-badge" id="score-badge">第1关</span>
+  </div>
+  <div class="main-content">
+    <div class="game-area">
+
+      <div class="game-intro-card" id="intro-card">
+        <h2>➕ 填运算符</h2>
+        <p>在数字之间填入 <strong>+ − × ÷</strong>，<br>使等式两端相等。<br><br>
+          点击空格选中，再点击运算符填入。<br>共 <strong>15关</strong>，难度递增！</p>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="openHistory()">📋 历史记录</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="startGame()">开始挑战</button>
+        </div>
+      </div>
+
+      <div class="game-play-card hidden" id="play-card">
+        <div class="level-progress" id="level-progress"></div>
+        <div class="equation-row" id="equation-row"></div>
+        <div class="result-preview" id="result-preview"></div>
+        <div class="op-palette">
+          <button class="op-palette-btn" onclick="fillOp('+')">+</button>
+          <button class="op-palette-btn" onclick="fillOp('-')">−</button>
+          <button class="op-palette-btn" onclick="fillOp('×')">×</button>
+          <button class="op-palette-btn" onclick="fillOp('÷')">÷</button>
+          <button class="op-palette-btn" onclick="clearSlot()" style="font-size:18px;color:var(--danger);">⌫</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="showHint()">💡 提示</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="submitLevel()">✓ 提交</button>
+        </div>
+      </div>
+
+      <div class="game-result-card hidden" id="result-card">
+        <div class="result-title">🎉 全部通关！</div>
+        <div class="result-score" id="result-score">0</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:4px;">关</div>
+        <div class="result-record hidden" id="result-record">🏆 新纪录！</div>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="startGame()">再来一局</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="window.location.href='../index.html'">返回大厅</button>
+        </div>
+        <div class="mt16" id="history-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="modal-mask" id="history-modal" onclick="closeHistory(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <span class="modal-title">📋 历史记录</span>
+        <button class="modal-close" onclick="closeHistory()">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+</div>
+<script src="../js/storage.js"></script>
+<script>
+  const GAME_ID = 'fill-operator';
+
+  // Levels: { nums: [n1,n2,...], ops: ['+','-','×','÷'], target: result }
+  const LEVELS = [
+    { nums:[1,2,3],   ops:['+','+'],   target:6  },
+    { nums:[3,2,1],   ops:['+','-'],   target:4  },
+    { nums:[2,3,4],   ops:['+','×'],   target:14 },
+    { nums:[6,2,3],   ops:['÷','+'],   target:6  },
+    { nums:[5,4,3,2], ops:['+','-','+'], target:6  },
+    { nums:[2,3,4,1], ops:['×','+','-'], target:9  },
+    { nums:[8,4,2,1], ops:['÷','×','+'], target:5  },
+    { nums:[10,2,3,4],ops:['-','×','+'], target:28 },
+    { nums:[6,3,2,5], ops:['÷','+','×'], target:35 },
+    { nums:[5,5,5,5], ops:['×','-','÷'], target:4  },
+    { nums:[3,4,5,2,1],ops:['+','×','-','+'], target:18 },
+    { nums:[9,3,2,4,1],ops:['÷','+','×','-'], target:11 },
+    { nums:[7,2,3,4,2],ops:['+','×','-','÷'], target:5  },
+    { nums:[6,2,8,4,3],ops:['+','×','÷','-'], target:6  },
+    { nums:[4,3,5,2,6],ops:['×','-','÷','+'], target:12 },
+  ];
+
+  let currentLevel = 0, cleared = 0;
+  let slots = []; // operators placed so far
+  let selectedSlot = -1;
+
+  function startGame() {
+    currentLevel = 0; cleared = 0;
+    document.getElementById('intro-card').classList.add('hidden');
+    document.getElementById('result-card').classList.add('hidden');
+    loadLevel(0);
+  }
+
+  function loadLevel(lvl) {
+    const lv = LEVELS[lvl];
+    slots = Array(lv.ops.length).fill('');
+    selectedSlot = -1;
+    document.getElementById('score-badge').textContent = `第${lvl+1}关`;
+    document.getElementById('play-card').classList.remove('hidden');
+    renderProgress(); renderEquation(); updatePreview();
+  }
+
+  function renderProgress() {
+    const el = document.getElementById('level-progress');
+    el.innerHTML = LEVELS.map((_,i) => {
+      const cls = i < cleared ? 'done' : i === currentLevel ? 'current' : '';
+      return `<div class="lp-dot ${cls}"></div>`;
+    }).join('');
+  }
+
+  function renderEquation() {
+    const lv = LEVELS[currentLevel];
+    const row = document.getElementById('equation-row');
+    let html = '';
+    lv.nums.forEach((n, i) => {
+      html += `<span class="eq-num">${n}</span>`;
+      if (i < lv.ops.length) {
+        const isSel = selectedSlot === i;
+        const val = slots[i];
+        const cls = 'eq-slot' + (val ? ' filled' : '') + (isSel ? ' selected' : '');
+        html += `<div class="${cls}" onclick="selectSlot(${i})">${val||'?'}</div>`;
+      }
+    });
+    html += `<span class="eq-result">= ${lv.target}</span>`;
+    row.innerHTML = html;
+  }
+
+  function selectSlot(i) {
+    selectedSlot = i;
+    renderEquation();
+  }
+
+  function fillOp(op) {
+    if (selectedSlot === -1) {
+      // Find first empty slot
+      const first = slots.findIndex(s => !s);
+      if (first === -1) { showToast('所有格子已填！'); return; }
+      selectedSlot = first;
+    }
+    slots[selectedSlot] = op;
+    selectedSlot = slots.findIndex((s,i) => i > selectedSlot && !s);
+    if (selectedSlot === -1) selectedSlot = -1;
+    renderEquation(); updatePreview();
+  }
+
+  function clearSlot() {
+    if (selectedSlot === -1) return;
+    slots[selectedSlot] = '';
+    renderEquation(); updatePreview();
+  }
+
+  function updatePreview() {
+    const lv = LEVELS[currentLevel];
+    if (slots.some(s => !s)) { document.getElementById('result-preview').textContent = ''; return; }
+    const val = evalLevel(lv, slots);
+    const ok = Math.abs(val - lv.target) < 1e-9;
+    document.getElementById('result-preview').textContent =
+      ok ? `✅ ${val} = ${lv.target}` : `当前结果 = ${Number.isInteger(val)?val:val.toFixed(2)}`;
+  }
+
+  function evalLevel(lv, ops) {
+    // Left-to-right evaluation
+    let result = lv.nums[0];
+    for (let i=0; i<ops.length; i++) {
+      const n = lv.nums[i+1];
+      if (ops[i]==='+') result += n;
+      else if (ops[i]==='-') result -= n;
+      else if (ops[i]==='×') result *= n;
+      else if (ops[i]==='÷') result = n===0 ? NaN : result / n;
+    }
+    return result;
+  }
+
+  function submitLevel() {
+    if (slots.some(s => !s)) { showToast('还有空格未填！'); return; }
+    const lv = LEVELS[currentLevel];
+    const val = evalLevel(lv, slots);
+    if (Math.abs(val - lv.target) < 1e-9) {
+      cleared++;
+      if (currentLevel + 1 >= LEVELS.length) {
+        endGame(); return;
+      }
+      currentLevel++;
+      loadLevel(currentLevel);
+    } else {
+      const el = document.getElementById('equation-row');
+      el.classList.add('shake');
+      setTimeout(() => el.classList.remove('shake'), 400);
+      showToast(`结果是 ${Number.isInteger(val)?val:val.toFixed(2)}，不对！换个思路`);
+    }
+  }
+
+  function showHint() {
+    const lv = LEVELS[currentLevel];
+    const firstEmpty = slots.findIndex(s => !s);
+    if (firstEmpty === -1) { showToast('已全部填完！'); return; }
+    slots[firstEmpty] = lv.ops[firstEmpty];
+    selectedSlot = -1;
+    renderEquation(); updatePreview();
+    showToast(`提示：第${firstEmpty+1}个位置是 "${lv.ops[firstEmpty]}"`);
+  }
+
+  function endGame() {
+    document.getElementById('play-card').classList.add('hidden');
+    document.getElementById('result-card').classList.remove('hidden');
+    document.getElementById('result-score').textContent = cleared;
+    const isRecord = Storage.saveRecord(GAME_ID, { value: cleared, label: `${cleared}关` }, 'higher');
+    if (isRecord) document.getElementById('result-record').classList.remove('hidden');
+    const history = Storage.getHistory(GAME_ID);
+    if (history.length) {
+      document.getElementById('history-list').innerHTML =
+        '<div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted);">历史记录</div>' +
+        history.slice(0,5).map(h=>`<div style="background:var(--bg);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;font-size:13px;"><span>${h.label}</span><span style="color:var(--muted)">${h.date}</span></div>`).join('');
+    }
+  }
+
+  function showToast(msg) {
+    const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'),2000);
+  }
+
+  const MEDALS=['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  function openHistory() {
+    const history=Storage.getHistory(GAME_ID); const best=Storage.getRecord(GAME_ID);
+    const body=document.getElementById('modal-body');
+    if(!history.length){body.innerHTML='<div class="modal-empty">还没有记录，快去挑战吧！🎮</div>';}
+    else{const bestHtml=best?`<div style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:14px;font-weight:700;">🏆 最佳纪录</span><span style="font-size:20px;font-weight:800;">${best.label}</span></div>`:'';body.innerHTML=bestHtml+history.map((h,i)=>`<div class="history-row"><span class="h-rank">${MEDALS[i]||i+1}</span><span class="h-val">${h.label}</span><span class="h-date">${h.date}</span></div>`).join('');}
+    document.getElementById('history-modal').classList.add('open');
+  }
+  function closeHistory(e){if(e&&e.target!==document.getElementById('history-modal'))return;document.getElementById('history-modal').classList.remove('open');}
+</script>
+</body>
+</html>

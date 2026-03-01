@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>π蒙特卡洛 — 数学趣味游戏</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .pi-canvas-wrap { text-align:center; margin:8px 0; }
+    canvas { border-radius:12px; border:2px solid #e5e7eb; }
+    .pi-display { font-size:40px; font-weight:900; text-align:center; color:var(--primary); margin:6px 0; letter-spacing:2px; }
+    .pi-error { font-size:14px; text-align:center; color:var(--muted); }
+    .speed-btns { display:flex; gap:8px; margin:6px 0; }
+    .speed-btn { flex:1; padding:10px; border-radius:10px; border:2px solid #e5e7eb; background:#fff; font-size:14px; font-weight:700; cursor:pointer; color:var(--muted); transition:all .15s; }
+    .speed-btn.active { border-color:var(--primary); background:#ede9fe; color:var(--primary); }
+    .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:6px 0; }
+    .sg-box { background:var(--bg); border-radius:10px; padding:10px; text-align:center; }
+    .sg-val { font-size:20px; font-weight:800; color:var(--primary); }
+    .sg-label { font-size:11px; color:var(--muted); }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="toast" id="toast"></div>
+  <div class="game-header">
+    <a class="btn-back" href="../index.html">← 返回</a>
+    <span class="game-header-title">π 蒙特卡洛</span>
+    <span class="score-badge" id="score-badge">误差 -</span>
+  </div>
+  <div class="main-content">
+    <div class="game-area">
+
+      <div class="game-intro-card" id="intro-card">
+        <h2>π 蒙特卡洛估算</h2>
+        <p>在正方形内随机投点，落在内切圆内的概率 = <strong>π/4</strong>。<br><br>
+          所以：<strong>π ≈ 4 × (圆内点数 / 总点数)</strong><br><br>
+          投的点越多，估算越精确！<br>亲眼见证大数定律！</p>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="openHistory()">📋 历史记录</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="startGame()">开始投点</button>
+        </div>
+      </div>
+
+      <div class="game-play-card hidden" id="play-card" style="padding:12px;">
+        <div class="pi-canvas-wrap">
+          <canvas id="pi-canvas" width="260" height="260"></canvas>
+        </div>
+        <div class="pi-display" id="pi-display">π ≈ ?</div>
+        <div class="pi-error" id="pi-error">误差：-</div>
+        <div class="stat-grid">
+          <div class="sg-box"><div class="sg-val" id="inside-val">0</div><div class="sg-label">圆内</div></div>
+          <div class="sg-box"><div class="sg-val" id="total-val">0</div><div class="sg-label">总点数</div></div>
+        </div>
+        <div style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:4px;">投点速度</div>
+        <div class="speed-btns">
+          <button class="speed-btn" id="sp1" onclick="setSpeed(1)">×1</button>
+          <button class="speed-btn active" id="sp10" onclick="setSpeed(10)">×10</button>
+          <button class="speed-btn" id="sp100" onclick="setSpeed(100)">×100</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:6px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="pauseResume()" id="pause-btn">⏸ 暂停</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="endGame()">✓ 记录结果</button>
+        </div>
+      </div>
+
+      <div class="game-result-card hidden" id="result-card">
+        <div class="result-title">π 已估算！</div>
+        <div class="result-score" id="result-score">3.14</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:4px;">估算值</div>
+        <div class="result-record hidden" id="result-record">🏆 最高精度！</div>
+        <div style="background:var(--bg);border-radius:12px;padding:14px;font-size:13px;line-height:1.8;margin-bottom:12px;" id="result-comment"></div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="startGame()">再试一次</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="window.location.href='../index.html'">返回大厅</button>
+        </div>
+        <div class="mt16" id="history-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="modal-mask" id="history-modal" onclick="closeHistory(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header"><span class="modal-title">📋 历史记录</span><button class="modal-close" onclick="closeHistory()">✕</button></div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+</div>
+<script src="../js/storage.js"></script>
+<script>
+  const GAME_ID = 'pi-monte-carlo';
+  const PI = Math.PI;
+  let inside=0, total=0, speed=10, paused=false, animFrame=null;
+  let canvas, ctx;
+
+  function startGame(){
+    inside=0;total=0;paused=false;
+    canvas=document.getElementById('pi-canvas');
+    ctx=canvas.getContext('2d');
+    document.getElementById('inside-val').textContent='0';
+    document.getElementById('total-val').textContent='0';
+    document.getElementById('pi-display').textContent='π ≈ ?';
+    document.getElementById('pi-error').textContent='误差：-';
+    document.getElementById('score-badge').textContent='误差 -';
+    document.getElementById('pause-btn').textContent='⏸ 暂停';
+    document.getElementById('intro-card').classList.add('hidden');
+    document.getElementById('result-card').classList.add('hidden');
+    document.getElementById('play-card').classList.remove('hidden');
+    drawBackground();
+    animate();
+  }
+
+  function drawBackground(){
+    const W=canvas.width,H=canvas.height;
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle='#f8f9ff';ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle='#cbd5e1';ctx.lineWidth=2;
+    ctx.strokeRect(1,1,W-2,H-2);
+    ctx.beginPath();ctx.arc(W/2,H/2,W/2-1,0,2*PI);
+    ctx.strokeStyle='#667eea';ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle='rgba(102,126,234,0.06)';ctx.fill();
+  }
+
+  function setSpeed(s){
+    speed=s;
+    ['sp1','sp10','sp100'].forEach(id=>document.getElementById(id).classList.remove('active'));
+    document.getElementById('sp'+s).classList.add('active');
+  }
+
+  function pauseResume(){
+    paused=!paused;
+    document.getElementById('pause-btn').textContent=paused?'▶ 继续':'⏸ 暂停';
+    if(!paused)animate();
+  }
+
+  function animate(){
+    if(paused||total>=50000)return;
+    const W=canvas.width,H=canvas.height;
+    for(let i=0;i<speed;i++){
+      const x=Math.random(),y=Math.random();
+      const dist=(x-0.5)**2+(y-0.5)**2;
+      const inCircle=dist<=0.25;
+      if(inCircle)inside++;
+      total++;
+      if(total<=5000){ // Only draw first 5000 for perf
+        ctx.beginPath();ctx.arc(x*W,y*H,1.5,0,2*PI);
+        ctx.fillStyle=inCircle?'rgba(102,126,234,0.7)':'rgba(248,113,113,0.5)';ctx.fill();
+      }
+    }
+    const piEst=4*inside/total;
+    const err=Math.abs(piEst-PI);
+    const errPct=(err/PI*100).toFixed(3);
+    document.getElementById('pi-display').textContent='π ≈ '+piEst.toFixed(6);
+    document.getElementById('pi-error').textContent=`误差：${err.toFixed(6)} (${errPct}%)`;
+    document.getElementById('inside-val').textContent=inside.toLocaleString();
+    document.getElementById('total-val').textContent=total.toLocaleString();
+    document.getElementById('score-badge').textContent=`误差 ${errPct}%`;
+    animFrame=requestAnimationFrame(animate);
+  }
+
+  function endGame(){
+    if(animFrame)cancelAnimationFrame(animFrame);
+    paused=true;
+    const piEst=4*inside/total;
+    const err=Math.abs(piEst-PI);
+    const precision=Math.round((1-err/PI)*100);
+    document.getElementById('play-card').classList.add('hidden');
+    document.getElementById('result-card').classList.remove('hidden');
+    document.getElementById('result-score').textContent=piEst.toFixed(6);
+    document.getElementById('result-comment').innerHTML=`
+      真实π = ${PI.toFixed(8)}<br>
+      你的估算 = ${piEst.toFixed(6)}<br>
+      误差 = ${err.toFixed(6)}<br>
+      精度 = <b>${precision}%</b><br>
+      共投了 <b>${total.toLocaleString()}</b> 个点<br><br>
+      <span style="color:var(--muted);">投点越多越准确，这就是蒙特卡洛方法的魅力！</span>`;
+    const isRecord=Storage.saveRecord(GAME_ID,{value:precision,label:`精度${precision}%(${total.toLocaleString()}点)`},'higher');
+    if(isRecord)document.getElementById('result-record').classList.remove('hidden');
+    const history=Storage.getHistory(GAME_ID);
+    if(history.length)document.getElementById('history-list').innerHTML='<div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted);">历史记录</div>'+history.slice(0,5).map(h=>`<div style="background:var(--bg);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;font-size:13px;"><span>${h.label}</span><span style="color:var(--muted)">${h.date}</span></div>`).join('');
+  }
+
+  const MEDALS=['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  function openHistory(){const h=Storage.getHistory(GAME_ID);const b=Storage.getRecord(GAME_ID);const body=document.getElementById('modal-body');if(!h.length){body.innerHTML='<div class="modal-empty">还没有记录！🎮</div>';}else{const bh=b?`<div style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:14px;font-weight:700;">🏆 最佳纪录</span><span style="font-size:20px;font-weight:800;">${b.label}</span></div>`:'';body.innerHTML=bh+h.map((x,i)=>`<div class="history-row"><span class="h-rank">${MEDALS[i]||i+1}</span><span class="h-val">${x.label}</span><span class="h-date">${x.date}</span></div>`).join('');}document.getElementById('history-modal').classList.add('open');}
+  function closeHistory(e){if(e&&e.target!==document.getElementById('history-modal'))return;document.getElementById('history-modal').classList.remove('open');}
+</script>
+</body>
+</html>

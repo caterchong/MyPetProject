@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>天平称假币 — 数学趣味游戏</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .coins-area { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; padding:10px; background:var(--bg); border-radius:14px; margin:8px 0; min-height:60px; }
+    .coin {
+      width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+      font-size:14px; font-weight:700; cursor:pointer; border:2px solid transparent;
+      transition:all .15s; user-select:none;
+    }
+    .coin.normal  { background:#e2e8f0; color:#475569; border-color:#cbd5e1; }
+    .coin.left    { background:#dbeafe; color:#1d4ed8; border-color:#3b82f6; }
+    .coin.right   { background:#fce7f3; color:#be185d; border-color:#db2777; }
+    .coin.fake    { background:#fbbf24; color:#92400e; border-color:#d97706; }
+    .scale-area { display:flex; align-items:flex-end; justify-content:center; gap:16px; margin:8px 0; height:100px; }
+    .pan { display:flex; flex-direction:column; align-items:center; flex:1; max-width:140px; }
+    .pan-box { width:100%; min-height:50px; border:2px solid #cbd5e1; border-radius:10px; background:#fff; display:flex; flex-wrap:wrap; gap:4px; padding:6px; justify-content:center; align-items:center; transition:transform .5s; }
+    .pan-label { font-size:11px; color:var(--muted); margin-top:4px; font-weight:700; }
+    .scale-pole { width:4px; height:80px; background:#94a3b8; border-radius:2px; }
+    .scale-result { font-size:24px; text-align:center; margin:4px 0; height:30px; }
+    .pan-coin { width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; border:2px solid transparent; }
+    .pan-coin.left  { background:#dbeafe; color:#1d4ed8; border-color:#3b82f6; }
+    .pan-coin.right { background:#fce7f3; color:#be185d; border-color:#db2777; }
+    .weigh-btn { background:var(--primary); color:#fff; border:none; border-radius:12px; padding:12px 24px; font-size:15px; font-weight:700; cursor:pointer; width:100%; margin:6px 0; }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="toast" id="toast"></div>
+  <div class="game-header">
+    <a class="btn-back" href="../index.html">← 返回</a>
+    <span class="game-header-title">⚖️ 天平称假币</span>
+    <span class="score-badge" id="score-badge">第1关</span>
+  </div>
+  <div class="main-content">
+    <div class="game-area">
+
+      <div class="game-intro-card" id="intro-card">
+        <h2>⚖️ 天平称假币</h2>
+        <p>硬币中有 <strong>1枚假币</strong>（比真币轻）。<br>
+          用天平找出它！<br><br>
+          点击硬币放到左盘或右盘，<br>再点击"称重"查看结果，<br>最后点击你认为的假币！<br><br>
+          关卡越高硬币越多，越难找！</p>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="openHistory()">📋 历史记录</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="startGame()">开始称重</button>
+        </div>
+      </div>
+
+      <div class="game-play-card hidden" id="play-card" style="padding:12px;">
+        <div class="stats-row" style="margin-bottom:6px;">
+          <div class="stat-box"><div class="stat-val" id="level-val">1</div><div class="stat-label">关卡</div></div>
+          <div class="stat-box"><div class="stat-val" id="weighs-val">0</div><div class="stat-label">称重次数</div></div>
+          <div class="stat-box"><div class="stat-val" id="coins-val">0</div><div class="stat-label">硬币数</div></div>
+        </div>
+        <div style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:4px;">点击硬币 → 左盘/右盘（再点移回），确认后称重</div>
+        <div class="coins-area" id="coins-area"></div>
+        <div class="scale-area">
+          <div class="pan"><div class="pan-box" id="pan-left"></div><div class="pan-label">⬅ 左盘</div></div>
+          <div class="scale-pole"></div>
+          <div class="scale-result" id="scale-result">⚖️</div>
+          <div class="scale-pole"></div>
+          <div class="pan"><div class="pan-box" id="pan-right"></div><div class="pan-label">右盘 ➡</div></div>
+        </div>
+        <button class="weigh-btn" onclick="weigh()">⚖️ 称重</button>
+        <div style="font-size:13px;color:var(--muted);text-align:center;margin-top:4px;" id="hint-label"></div>
+        <div style="font-size:12px;color:var(--muted);text-align:center;margin-top:6px;">找到假币后，点击硬币选中并确认</div>
+        <button class="btn btn-success mt8 hidden" id="confirm-btn" onclick="confirmFake()">✓ 这枚是假币！</button>
+      </div>
+
+      <div class="game-result-card hidden" id="result-card">
+        <div class="result-title" id="result-title">🎉 找到假币！</div>
+        <div class="result-score" id="result-score">0</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:4px;">关通过</div>
+        <div class="result-record hidden" id="result-record">🏆 新纪录！</div>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="startGame()">从头开始</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="window.location.href='../index.html'">返回大厅</button>
+        </div>
+        <div class="mt16" id="history-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="modal-mask" id="history-modal" onclick="closeHistory(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header"><span class="modal-title">📋 历史记录</span><button class="modal-close" onclick="closeHistory()">✕</button></div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+</div>
+<script src="../js/storage.js"></script>
+<script>
+  const GAME_ID = 'balance-puzzle';
+  const LEVELS = [3,6,9,12,15,18,21,24,27];
+  let level=0, numCoins=0, fakeIdx=0, weighCount=0;
+  let coinStates=[]; // 'pool'|'left'|'right'
+  let guessMode=false, guessedCoin=-1, cleared=0;
+
+  function startGame(){
+    level=0;cleared=0;
+    document.getElementById('intro-card').classList.add('hidden');
+    document.getElementById('result-card').classList.add('hidden');
+    loadLevel();
+  }
+
+  function loadLevel(){
+    numCoins=LEVELS[level];
+    fakeIdx=Math.floor(Math.random()*numCoins);
+    weighCount=0;guessMode=false;guessedCoin=-1;
+    coinStates=Array(numCoins).fill('pool');
+    document.getElementById('level-val').textContent=level+1;
+    document.getElementById('coins-val').textContent=numCoins;
+    document.getElementById('weighs-val').textContent=0;
+    document.getElementById('score-badge').textContent=`第${level+1}关`;
+    document.getElementById('hint-label').textContent='';
+    document.getElementById('scale-result').textContent='⚖️';
+    document.getElementById('confirm-btn').classList.add('hidden');
+    document.getElementById('pan-left').innerHTML='';
+    document.getElementById('pan-right').innerHTML='';
+    document.getElementById('play-card').classList.remove('hidden');
+    renderCoins();
+  }
+
+  function renderCoins(){
+    const area=document.getElementById('coins-area');
+    area.innerHTML=coinStates.map((s,i)=>{
+      const cls=s==='pool'?'normal':s==='left'?'left':'right';
+      const selected=guessMode&&guessedCoin===i?' style="outline:3px solid gold;"':'';
+      return `<div class="coin ${cls}"${selected} onclick="toggleCoin(${i})">${i+1}</div>`;
+    }).join('');
+    const left=coinStates.map((s,i)=>({s,i})).filter(x=>x.s==='left');
+    const right=coinStates.map((s,i)=>({s,i})).filter(x=>x.s==='right');
+    document.getElementById('pan-left').innerHTML=left.map(x=>`<div class="pan-coin left">${x.i+1}</div>`).join('');
+    document.getElementById('pan-right').innerHTML=right.map(x=>`<div class="pan-coin right">${x.i+1}</div>`).join('');
+  }
+
+  function toggleCoin(i){
+    if(guessMode){
+      guessedCoin=guessedCoin===i?-1:i;
+      document.getElementById('confirm-btn').classList.toggle('hidden',guessedCoin===-1);
+      renderCoins();return;
+    }
+    const s=coinStates[i];
+    if(s==='pool') coinStates[i]='left';
+    else if(s==='left') coinStates[i]='right';
+    else coinStates[i]='pool';
+    renderCoins();
+  }
+
+  function weigh(){
+    const left=coinStates.map((s,i)=>({s,i})).filter(x=>x.s==='left');
+    const right=coinStates.map((s,i)=>({s,i})).filter(x=>x.s==='right');
+    if(!left.length&&!right.length){showToast('两盘都没放硬币！');return;}
+    weighCount++;
+    document.getElementById('weighs-val').textContent=weighCount;
+    const fakeOnLeft=left.some(x=>x.i===fakeIdx);
+    const fakeOnRight=right.some(x=>x.i===fakeIdx);
+    let result;
+    if(fakeOnLeft) result='right-heavy'; // right heavier
+    else if(fakeOnRight) result='left-heavy';
+    else result='equal';
+    document.getElementById('scale-result').textContent=result==='equal'?'⚖️':result==='right-heavy'?'⬅️ 右重':' ➡️ 左重';
+    document.getElementById('hint-label').textContent=result==='equal'?'两盘等重，假币在未称的硬币中':result==='right-heavy'?'右盘更重，假币在左盘（假币更轻）':'左盘更重，假币在右盘（假币更轻）';
+    if(!guessMode){
+      guessMode=true;
+      showToast('现在点击你认为的假币，再点击确认！');
+    }
+    renderCoins();
+  }
+
+  function confirmFake(){
+    if(guessedCoin===-1){showToast('请先选中你认为的假币');return;}
+    if(guessedCoin===fakeIdx){
+      cleared=level+1;
+      // Reveal
+      const area=document.getElementById('coins-area');
+      area.querySelectorAll('.coin').forEach((el,i)=>{
+        if(i===fakeIdx) el.className='coin fake';
+      });
+      showToast(`🎉 正确！第${fakeIdx+1}号是假币，称了${weighCount}次`);
+      setTimeout(()=>{
+        if(level+1>=LEVELS.length){endGame(true);}
+        else{level++;loadLevel();}
+      },1500);
+    }else{
+      showToast(`❌ 错了！真假币是第${fakeIdx+1}号`);
+      setTimeout(()=>endGame(false),1500);
+    }
+  }
+
+  function endGame(success){
+    document.getElementById('play-card').classList.add('hidden');
+    document.getElementById('result-card').classList.remove('hidden');
+    document.getElementById('result-title').textContent=success?'🎉 全部通关！':`😅 通过了${cleared}关`;
+    document.getElementById('result-score').textContent=cleared;
+    const isRecord=Storage.saveRecord(GAME_ID,{value:cleared,label:`${cleared}关`},'higher');
+    if(isRecord)document.getElementById('result-record').classList.remove('hidden');
+    const history=Storage.getHistory(GAME_ID);
+    if(history.length)document.getElementById('history-list').innerHTML='<div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted);">历史记录</div>'+history.slice(0,5).map(h=>`<div style="background:var(--bg);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;font-size:13px;"><span>${h.label}</span><span style="color:var(--muted)">${h.date}</span></div>`).join('');
+  }
+
+  function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+  const MEDALS=['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  function openHistory(){const h=Storage.getHistory(GAME_ID);const b=Storage.getRecord(GAME_ID);const body=document.getElementById('modal-body');if(!h.length){body.innerHTML='<div class="modal-empty">还没有记录！🎮</div>';}else{const bh=b?`<div style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:14px;font-weight:700;">🏆 最佳纪录</span><span style="font-size:20px;font-weight:800;">${b.label}</span></div>`:'';body.innerHTML=bh+h.map((x,i)=>`<div class="history-row"><span class="h-rank">${MEDALS[i]||i+1}</span><span class="h-val">${x.label}</span><span class="h-date">${x.date}</span></div>`).join('');}document.getElementById('history-modal').classList.add('open');}
+  function closeHistory(e){if(e&&e.target!==document.getElementById('history-modal'))return;document.getElementById('history-modal').classList.remove('open');}
+</script>
+</body>
+</html>

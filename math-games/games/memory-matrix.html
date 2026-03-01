@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>记忆矩阵 — 数学趣味游戏</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .mem-grid { display:grid; gap:6px; margin:8px auto; width:fit-content; }
+    .mem-cell {
+      width:68px; height:68px; border-radius:12px; display:flex; align-items:center;
+      justify-content:center; font-size:22px; font-weight:800; transition:all .4s; cursor:pointer;
+      user-select:none;
+    }
+    .mem-cell.show  { background:linear-gradient(135deg,var(--primary),var(--primary-dark)); color:#fff; }
+    .mem-cell.hide  { background:#e5e7eb; color:transparent; }
+    .mem-cell.correct { background:var(--success); color:#fff; }
+    .mem-cell.wrong   { background:var(--danger);  color:#fff; }
+    .mem-cell.empty   { background:#f1f5f9; color:var(--muted); cursor:not-allowed; }
+    .phase-label { font-size:18px; font-weight:700; text-align:center; color:var(--primary); }
+    .countdown-big { font-size:48px; font-weight:900; text-align:center; color:var(--primary);
+      line-height:1.1; margin:8px 0; }
+    .query-label { font-size:14px; text-align:center; color:var(--muted); margin:4px 0; }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="toast" id="toast"></div>
+  <div class="game-header">
+    <a class="btn-back" href="../index.html">← 返回</a>
+    <span class="game-header-title">🧠 记忆矩阵</span>
+    <span class="score-badge" id="score-badge">第1关</span>
+  </div>
+  <div class="main-content">
+    <div class="game-area">
+
+      <div class="game-intro-card" id="intro-card">
+        <h2>🧠 记忆矩阵</h2>
+        <p>记住数字矩阵中每个数字的位置，<br>然后回答：<strong>某位置的数字是几？</strong><br><br>
+          每关记忆时间 <strong>3秒</strong>，难度从 3×3 到 6×6。<br>挑战你的短时记忆力！</p>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="openHistory()">📋 历史记录</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="startGame()">开始记忆</button>
+        </div>
+      </div>
+
+      <div class="game-play-card hidden" id="play-card" style="padding:12px;">
+        <div class="phase-label" id="phase-label">记忆阶段</div>
+        <div class="countdown-big hidden" id="countdown">3</div>
+        <div class="query-label hidden" id="query-label"></div>
+        <div class="mem-grid" id="mem-grid"></div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <input class="game-input hidden" id="answer-input" type="number" inputmode="numeric"
+                 placeholder="输入数字" style="flex:1;" onkeydown="if(event.key==='Enter')submitAnswer()">
+          <button class="btn btn-primary hidden" id="submit-btn" style="width:auto;padding:0 18px;" onclick="submitAnswer()">确定</button>
+        </div>
+      </div>
+
+      <div class="game-result-card hidden" id="result-card">
+        <div class="result-title" id="result-title">🎉 全部答对！</div>
+        <div class="result-score" id="result-score">3</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:4px;" id="result-unit">×3 通过</div>
+        <div class="result-record hidden" id="result-record">🏆 新纪录！</div>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="startGame()">再次挑战</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="window.location.href='../index.html'">返回大厅</button>
+        </div>
+        <div class="mt16" id="history-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="modal-mask" id="history-modal" onclick="closeHistory(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <span class="modal-title">📋 历史记录</span>
+        <button class="modal-close" onclick="closeHistory()">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+</div>
+<script src="../js/storage.js"></script>
+<script>
+  const GAME_ID = 'memory-matrix';
+  let n = 3, matrix = [], queryIdx = 0, phase = 'idle';
+  let bestN = 0;
+
+  function startGame() {
+    n = 3; bestN = 0;
+    document.getElementById('intro-card').classList.add('hidden');
+    document.getElementById('result-card').classList.add('hidden');
+    loadLevel();
+  }
+
+  function loadLevel() {
+    document.getElementById('score-badge').textContent = `第${n-2}关(${n}×${n})`;
+    document.getElementById('play-card').classList.remove('hidden');
+    matrix = [];
+    const nums = shuffle(Array.from({length:n*n},(_,i)=>i+1));
+    matrix = nums;
+    queryIdx = Math.floor(Math.random() * n*n);
+    showMemoryPhase();
+  }
+
+  function shuffle(arr) {
+    for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}
+    return arr;
+  }
+
+  function showMemoryPhase() {
+    phase = 'memory';
+    document.getElementById('phase-label').textContent = `记忆阶段（${n}×${n}）`;
+    document.getElementById('countdown').classList.remove('hidden');
+    document.getElementById('query-label').classList.add('hidden');
+    document.getElementById('answer-input').classList.add('hidden');
+    document.getElementById('submit-btn').classList.add('hidden');
+    renderGrid(true);
+    let t = 3;
+    document.getElementById('countdown').textContent = t;
+    const interval = setInterval(() => {
+      t--;
+      if (t <= 0) { clearInterval(interval); showQueryPhase(); return; }
+      document.getElementById('countdown').textContent = t;
+    }, 1000);
+  }
+
+  function showQueryPhase() {
+    phase = 'query';
+    document.getElementById('countdown').classList.add('hidden');
+    const row = Math.floor(queryIdx / n) + 1;
+    const col = queryIdx % n + 1;
+    document.getElementById('phase-label').textContent = '回忆阶段';
+    document.getElementById('query-label').textContent = `第 ${row} 行，第 ${col} 列的数字是？`;
+    document.getElementById('query-label').classList.remove('hidden');
+    document.getElementById('answer-input').classList.remove('hidden');
+    document.getElementById('answer-input').value = '';
+    document.getElementById('submit-btn').classList.remove('hidden');
+    renderGrid(false);
+    setTimeout(() => document.getElementById('answer-input').focus(), 100);
+  }
+
+  function renderGrid(showNums) {
+    const grid = document.getElementById('mem-grid');
+    grid.style.gridTemplateColumns = `repeat(${n},68px)`;
+    grid.innerHTML = matrix.map((v,i) => {
+      let cls = showNums ? 'show' : (phase==='query' && i===queryIdx ? 'empty' : 'hide');
+      return `<div class="mem-cell ${cls}">${showNums ? v : (cls==='empty'?'?':'')}</div>`;
+    }).join('');
+  }
+
+  function submitAnswer() {
+    const val = parseInt(document.getElementById('answer-input').value, 10);
+    if (isNaN(val)) return;
+    const correct = val === matrix[queryIdx];
+    const grid = document.getElementById('mem-grid');
+    const cells = grid.querySelectorAll('.mem-cell');
+    cells.forEach((c,i) => {
+      if (i === queryIdx) c.className = 'mem-cell ' + (correct ? 'correct' : 'wrong');
+      else { c.className = 'mem-cell show'; c.textContent = matrix[i]; }
+    });
+    document.getElementById('answer-input').classList.add('hidden');
+    document.getElementById('submit-btn').classList.add('hidden');
+    if (correct) {
+      bestN = n;
+      setTimeout(() => {
+        if (n < 6) { n++; loadLevel(); }
+        else endGame(true);
+      }, 1000);
+    } else {
+      showToast(`答案是 ${matrix[queryIdx]}！`);
+      setTimeout(() => endGame(false), 1200);
+    }
+  }
+
+  function endGame(allClear) {
+    document.getElementById('play-card').classList.add('hidden');
+    document.getElementById('result-card').classList.remove('hidden');
+    document.getElementById('result-title').textContent = allClear ? '🎉 全部通关！' : `😅 ${bestN}×${bestN} 通关！`;
+    document.getElementById('result-score').textContent = bestN;
+    document.getElementById('result-unit').textContent = `×${bestN} 通过`;
+    const isRecord = Storage.saveRecord(GAME_ID, { value: bestN, label: `${bestN}×${bestN}` }, 'higher');
+    if (isRecord) document.getElementById('result-record').classList.remove('hidden');
+    const history = Storage.getHistory(GAME_ID);
+    if (history.length) {
+      document.getElementById('history-list').innerHTML =
+        '<div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted);">历史记录</div>' +
+        history.slice(0,5).map(h=>`<div style="background:var(--bg);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;font-size:13px;"><span>${h.label}</span><span style="color:var(--muted)">${h.date}</span></div>`).join('');
+    }
+  }
+
+  function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000);}
+  const MEDALS=['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  function openHistory(){const history=Storage.getHistory(GAME_ID);const best=Storage.getRecord(GAME_ID);const body=document.getElementById('modal-body');if(!history.length){body.innerHTML='<div class="modal-empty">还没有记录，快去挑战吧！🎮</div>';}else{const bestHtml=best?`<div style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:14px;font-weight:700;">🏆 最佳纪录</span><span style="font-size:20px;font-weight:800;">${best.label}</span></div>`:'';body.innerHTML=bestHtml+history.map((h,i)=>`<div class="history-row"><span class="h-rank">${MEDALS[i]||i+1}</span><span class="h-val">${h.label}</span><span class="h-date">${h.date}</span></div>`).join('');}document.getElementById('history-modal').classList.add('open');}
+  function closeHistory(e){if(e&&e.target!==document.getElementById('history-modal'))return;document.getElementById('history-modal').classList.remove('open');}
+</script>
+</body>
+</html>

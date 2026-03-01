@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>数字华容道 — 数学趣味游戏</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .puzzle-grid {
+      display:grid; grid-template-columns:repeat(4,1fr); gap:6px;
+      padding:10px; background:#f0f2ff; border-radius:16px; margin:8px 0;
+    }
+    .puzzle-cell {
+      aspect-ratio:1; border-radius:12px; display:flex; align-items:center; justify-content:center;
+      font-size:26px; font-weight:800; cursor:pointer; transition:all .15s;
+      border:2px solid transparent;
+    }
+    .puzzle-cell.filled {
+      background:linear-gradient(135deg,var(--primary),var(--primary-dark));
+      color:#fff; box-shadow:0 3px 10px rgba(102,126,234,0.3);
+    }
+    .puzzle-cell.filled:active { transform:scale(0.92); }
+    .puzzle-cell.empty { background:#e5e7eb; cursor:default; }
+    .puzzle-cell.correct { background:linear-gradient(135deg,var(--success),#16a34a); }
+    .moves-display { font-size:36px; font-weight:800; text-align:center; color:var(--primary); }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="toast" id="toast"></div>
+  <div class="game-header">
+    <a class="btn-back" href="../index.html">← 返回</a>
+    <span class="game-header-title">🧩 数字华容道</span>
+    <span class="score-badge" id="score-badge">0 步</span>
+  </div>
+  <div class="main-content">
+    <div class="game-area">
+
+      <div class="game-intro-card" id="intro-card">
+        <h2>🧩 数字华容道</h2>
+        <p>一个 <strong>4×4</strong> 的方格，有15个数字和1个空格。<br>
+          通过滑动数字，将1-15按顺序排列（空格在右下角）。<br><br>
+          步数越少，技术越高！</p>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="openHistory()">📋 历史记录</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="startGame()">开始游戏</button>
+        </div>
+      </div>
+
+      <div class="game-play-card hidden" id="play-card" style="padding:12px;">
+        <div class="stats-row" style="margin-bottom:8px;">
+          <div class="stat-box">
+            <div class="stat-val" id="moves-val">0</div>
+            <div class="stat-label">步数</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" id="time-val">0</div>
+            <div class="stat-label">秒</div>
+          </div>
+        </div>
+        <div class="puzzle-grid" id="puzzle-grid"></div>
+        <button class="btn btn-outline mt8" onclick="startGame()" style="font-size:14px;">🔄 重新打乱</button>
+      </div>
+
+      <div class="game-result-card hidden" id="result-card">
+        <div class="result-title">🎉 完成！</div>
+        <div class="result-score" id="result-score">0</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:4px;">步</div>
+        <div class="result-record hidden" id="result-record">🏆 新纪录！</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:16px;" id="result-time"></div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="startGame()">再来一局</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="window.location.href='../index.html'">返回大厅</button>
+        </div>
+        <div class="mt16" id="history-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="modal-mask" id="history-modal" onclick="closeHistory(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <span class="modal-title">📋 历史记录</span>
+        <button class="modal-close" onclick="closeHistory()">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+</div>
+<script src="../js/storage.js"></script>
+<script>
+  const GAME_ID = 'fifteen-puzzle';
+  let board = []; // 0 = empty
+  let moves = 0, elapsed = 0;
+  let timerInterval = null;
+
+  function startGame() {
+    clearInterval(timerInterval);
+    moves = 0; elapsed = 0;
+    document.getElementById('moves-val').textContent = '0';
+    document.getElementById('time-val').textContent = '0';
+    document.getElementById('score-badge').textContent = '0 步';
+    board = shuffle15();
+    document.getElementById('intro-card').classList.add('hidden');
+    document.getElementById('result-card').classList.add('hidden');
+    document.getElementById('play-card').classList.remove('hidden');
+    renderBoard();
+    timerInterval = setInterval(() => {
+      elapsed++;
+      document.getElementById('time-val').textContent = elapsed;
+    }, 1000);
+  }
+
+  function shuffle15() {
+    // Generate a solvable random board
+    while (true) {
+      const arr = [...Array(15).keys()].map(i=>i+1);
+      arr.push(0);
+      for (let i = arr.length-1; i > 0; i--) {
+        const j = Math.floor(Math.random()*(i+1));
+        [arr[i],arr[j]] = [arr[j],arr[i]];
+      }
+      if (isSolvable(arr)) return arr;
+    }
+  }
+
+  function isSolvable(arr) {
+    // Count inversions; with 4x4 grid, check inversions + blank row
+    let inv = 0;
+    const flat = arr.filter(x=>x!==0);
+    for (let i=0;i<flat.length;i++) for(let j=i+1;j<flat.length;j++) if(flat[i]>flat[j]) inv++;
+    const blankRow = Math.floor(arr.indexOf(0)/4);
+    const blankFromBottom = 4 - blankRow;
+    return (blankFromBottom % 2 === 0) ? (inv % 2 === 1) : (inv % 2 === 0);
+  }
+
+  function renderBoard() {
+    const grid = document.getElementById('puzzle-grid');
+    grid.innerHTML = board.map((val,i) => {
+      const inPlace = val !== 0 && val === i+1;
+      const cls = val === 0 ? 'empty' : inPlace ? 'filled correct' : 'filled';
+      return `<div class="puzzle-cell ${cls}" onclick="slide(${i})">${val||''}</div>`;
+    }).join('');
+  }
+
+  function slide(i) {
+    const emptyIdx = board.indexOf(0);
+    const row = Math.floor(i/4), col = i%4;
+    const eRow = Math.floor(emptyIdx/4), eCol = emptyIdx%4;
+    if ((Math.abs(row-eRow)+Math.abs(col-eCol)) !== 1) return;
+    board[emptyIdx] = board[i];
+    board[i] = 0;
+    moves++;
+    document.getElementById('moves-val').textContent = moves;
+    document.getElementById('score-badge').textContent = moves + ' 步';
+    renderBoard();
+    if (isSolved()) setTimeout(endGame, 300);
+  }
+
+  function isSolved() {
+    return board.every((v,i) => i===15 ? v===0 : v===i+1);
+  }
+
+  function endGame() {
+    clearInterval(timerInterval);
+    document.getElementById('play-card').classList.add('hidden');
+    document.getElementById('result-card').classList.remove('hidden');
+    document.getElementById('result-score').textContent = moves;
+    document.getElementById('result-time').textContent = `用时 ${elapsed} 秒`;
+    const isRecord = Storage.saveRecord(GAME_ID, { value: moves, label: `${moves}步` }, 'lower');
+    if (isRecord) document.getElementById('result-record').classList.remove('hidden');
+    const history = Storage.getHistory(GAME_ID);
+    if (history.length) {
+      document.getElementById('history-list').innerHTML =
+        '<div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted);">历史记录</div>' +
+        history.slice(0,5).map(h=>`<div style="background:var(--bg);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;font-size:13px;"><span>${h.label}</span><span style="color:var(--muted)">${h.date}</span></div>`).join('');
+    }
+  }
+
+  const MEDALS = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  function openHistory() {
+    const history = Storage.getHistory(GAME_ID);
+    const best = Storage.getRecord(GAME_ID);
+    const body = document.getElementById('modal-body');
+    if (!history.length) { body.innerHTML = '<div class="modal-empty">还没有记录，快去挑战吧！🎮</div>'; }
+    else {
+      const bestHtml = best ? `<div style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:14px;font-weight:700;">🏆 最佳纪录</span><span style="font-size:20px;font-weight:800;">${best.label}</span></div>` : '';
+      body.innerHTML = bestHtml + history.map((h,i) => `<div class="history-row"><span class="h-rank">${MEDALS[i]||i+1}</span><span class="h-val">${h.label}</span><span class="h-date">${h.date}</span></div>`).join('');
+    }
+    document.getElementById('history-modal').classList.add('open');
+  }
+  function closeHistory(e) {
+    if (e && e.target !== document.getElementById('history-modal')) return;
+    document.getElementById('history-modal').classList.remove('open');
+  }
+</script>
+</body>
+</html>

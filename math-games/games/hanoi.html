@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>河内塔 — 数学趣味游戏</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .hanoi-canvas-wrap {
+      position: relative;
+      width: 100%;
+      background: #f8f9ff;
+      border-radius: 16px;
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+    }
+    canvas { display: block; width: 100%; }
+    .level-selector { display:flex; gap:6px; justify-content:center; margin:8px 0; flex-wrap:wrap; }
+    .level-btn {
+      padding:8px 14px; border-radius:99px; border:2px solid #e5e7eb;
+      background:#fff; font-size:14px; font-weight:700; cursor:pointer; color:var(--muted);
+      transition:all .15s;
+    }
+    .level-btn.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+    .info-row { display:flex; justify-content:space-between; font-size:13px; color:var(--muted); margin:4px 0; }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="toast" id="toast"></div>
+  <div class="game-header">
+    <a class="btn-back" href="../index.html">← 返回</a>
+    <span class="game-header-title">🗼 河内塔</span>
+    <span class="score-badge" id="score-badge">0 步</span>
+  </div>
+  <div class="main-content">
+    <div class="game-area">
+
+      <div class="game-intro-card" id="intro-card">
+        <h2>🗼 河内塔</h2>
+        <p>将所有圆盘从 <strong>左柱</strong> 移到 <strong>右柱</strong>，规则：<br>
+          · 每次只能移动一个圆盘<br>
+          · 大盘不能压在小盘上<br><br>
+          N个盘的最少步数 = <strong>2ⁿ - 1</strong><br>点击柱子选择和放置圆盘。</p>
+        <div style="margin:12px 0;">
+          <div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted);">选择难度（圆盘数量）</div>
+          <div class="level-selector" id="level-selector"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="openHistory()">📋 历史记录</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="startGame()">开始游戏</button>
+        </div>
+      </div>
+
+      <div class="game-play-card hidden" id="play-card" style="padding:16px 12px;">
+        <div class="info-row">
+          <span>步数: <strong id="moves-display">0</strong></span>
+          <span>最优: <strong id="optimal-display">0</strong> 步</span>
+          <span>难度: <strong id="level-display">3</strong> 盘</span>
+        </div>
+        <div class="hanoi-canvas-wrap">
+          <canvas id="hanoi-canvas" height="220"></canvas>
+        </div>
+        <p style="font-size:12px;color:var(--muted);text-align:center;margin-top:6px;">点击柱子选择/放置圆盘</p>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="restartGame()">🔄 重置</button>
+          <button class="btn btn-outline" style="flex:1;" onclick="autoSolve()">💡 自动演示</button>
+        </div>
+      </div>
+
+      <div class="game-result-card hidden" id="result-card">
+        <div class="result-title">🎉 完成！</div>
+        <div class="result-score" id="result-score">0</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:4px;">步</div>
+        <div class="result-record hidden" id="result-record">🏆 新纪录！</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:16px;" id="result-comment"></div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="startGame()">再来一局</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="window.location.href='../index.html'">返回大厅</button>
+        </div>
+        <div class="mt16" id="history-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="modal-mask" id="history-modal" onclick="closeHistory(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <span class="modal-title">📋 历史记录</span>
+        <button class="modal-close" onclick="closeHistory()">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+</div>
+<script src="../js/storage.js"></script>
+<script>
+  const GAME_ID = 'hanoi';
+  const COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#ec4899'];
+  let pegs = [[],[],[]]; // peg[i] = array of disk sizes (bottom to top, largest first)
+  let selectedPeg = -1;
+  let moves = 0;
+  let numDisks = 3;
+  let autoTimer = null;
+  let canvas, ctx;
+  const PEGX = [0.17, 0.5, 0.83]; // fractional x positions
+
+  function initLevelSelector() {
+    const sel = document.getElementById('level-selector');
+    sel.innerHTML = [3,4,5,6,7].map(n =>
+      `<button class="level-btn ${n===numDisks?'active':''}" onclick="selectLevel(${n})">${n}盘</button>`
+    ).join('');
+  }
+
+  function selectLevel(n) {
+    numDisks = n;
+    document.querySelectorAll('.level-btn').forEach(b => b.classList.toggle('active', parseInt(b.textContent)===n));
+  }
+
+  function startGame() {
+    clearInterval(autoTimer);
+    pegs = [[], [], []];
+    for (let i = numDisks; i >= 1; i--) pegs[0].push(i);
+    selectedPeg = -1;
+    moves = 0;
+    updateUI();
+    document.getElementById('intro-card').classList.add('hidden');
+    document.getElementById('result-card').classList.add('hidden');
+    document.getElementById('play-card').classList.remove('hidden');
+    canvas = document.getElementById('hanoi-canvas');
+    ctx = canvas.getContext('2d');
+    canvas.width = canvas.offsetWidth;
+    canvas.addEventListener('click', onCanvasClick);
+    document.getElementById('optimal-display').textContent = Math.pow(2, numDisks) - 1;
+    document.getElementById('level-display').textContent = numDisks;
+    render();
+  }
+
+  function restartGame() { clearInterval(autoTimer); startGame(); }
+
+  function selectLevel2(n) { numDisks = n; }
+
+  function onCanvasClick(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const pegIdx = PEGX.findIndex(px => Math.abs(px - x) < 0.18);
+    if (pegIdx === -1) return;
+
+    if (selectedPeg === -1) {
+      if (pegs[pegIdx].length > 0) { selectedPeg = pegIdx; render(); }
+    } else {
+      if (pegIdx === selectedPeg) { selectedPeg = -1; render(); return; }
+      const top = pegs[selectedPeg][pegs[selectedPeg].length - 1];
+      const dest = pegs[pegIdx];
+      if (dest.length === 0 || dest[dest.length-1] > top) {
+        pegs[pegIdx].push(pegs[selectedPeg].pop());
+        moves++;
+        updateUI();
+        selectedPeg = -1;
+        render();
+        if (pegs[2].length === numDisks) setTimeout(endGame, 300);
+      } else {
+        showToast('不能把大盘放在小盘上！');
+        selectedPeg = -1; render();
+      }
+    }
+  }
+
+  function render() {
+    if (!canvas || !ctx) return;
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    const baseY = H - 20, pegH = H - 50, diskH = Math.min(28, (pegH - 10) / numDisks);
+    const maxW = W * 0.28, minW = 22;
+
+    // Base
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillRect(10, baseY, W-20, 10);
+
+    // Pegs
+    PEGX.forEach((px, pi) => {
+      const cx = px * W;
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillRect(cx-5, baseY - pegH, 10, pegH);
+
+      // Disks
+      pegs[pi].forEach((size, di) => {
+        const dw = minW + (size-1) * (maxW - minW) / numDisks;
+        const dy = baseY - (di+1) * diskH;
+        const col = COLORS[(size-1) % COLORS.length];
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        ctx.roundRect(cx - dw/2, dy, dw, diskH-3, 5);
+        ctx.fill();
+        // number
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold ${Math.min(14, diskH-6)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText(size, cx, dy + diskH/2 + 4);
+      });
+
+      // Highlight selected
+      if (selectedPeg === pi && pegs[pi].length > 0) {
+        const size = pegs[pi][pegs[pi].length-1];
+        const dw = minW + (size-1) * (maxW - minW) / numDisks;
+        const dy = baseY - pegs[pi].length * diskH;
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.roundRect(cx - dw/2, dy, dw, diskH-3, 5);
+        ctx.stroke();
+      }
+    });
+
+    // Labels
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'center';
+    ['左','中','右'].forEach((l,i) => ctx.fillText(l, PEGX[i]*W, H-4));
+  }
+
+  function updateUI() {
+    document.getElementById('moves-display').textContent = moves;
+    document.getElementById('score-badge').textContent = `${moves} 步`;
+  }
+
+  function endGame() {
+    document.getElementById('play-card').classList.add('hidden');
+    document.getElementById('result-card').classList.remove('hidden');
+    document.getElementById('result-score').textContent = moves;
+    const optimal = Math.pow(2, numDisks) - 1;
+    const comment = moves === optimal ? '完美！达到最优解 👑' : `最优解是 ${optimal} 步，还能更好！`;
+    document.getElementById('result-comment').textContent = comment;
+    const isRecord = Storage.saveRecord(GAME_ID, { value: moves, label: `${moves}步(${numDisks}盘)` }, 'lower');
+    if (isRecord) document.getElementById('result-record').classList.remove('hidden');
+    const history = Storage.getHistory(GAME_ID);
+    if (history.length) {
+      document.getElementById('history-list').innerHTML =
+        '<div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted);">历史记录</div>' +
+        history.slice(0,5).map(h=>`<div style="background:var(--bg);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;font-size:13px;"><span>${h.label}</span><span style="color:var(--muted)">${h.date}</span></div>`).join('');
+    }
+  }
+
+  // Auto solve (iterative algorithm)
+  function autoSolve() {
+    clearInterval(autoTimer);
+    pegs = [[], [], []];
+    for (let i = numDisks; i >= 1; i--) pegs[0].push(i);
+    moves = 0; selectedPeg = -1; render(); updateUI();
+
+    const sol = [];
+    function solve(n, from, to, via) {
+      if (n === 0) return;
+      solve(n-1, from, via, to);
+      sol.push([from, to]);
+      solve(n-1, via, to, from);
+    }
+    solve(numDisks, 0, 2, 1);
+
+    let step = 0;
+    autoTimer = setInterval(() => {
+      if (step >= sol.length) { clearInterval(autoTimer); setTimeout(endGame, 400); return; }
+      const [from, to] = sol[step++];
+      pegs[to].push(pegs[from].pop());
+      moves++; updateUI(); render();
+    }, Math.max(150, 600 - numDisks * 60));
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1800);
+  }
+
+  const MEDALS = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  function openHistory() {
+    const history = Storage.getHistory(GAME_ID);
+    const best = Storage.getRecord(GAME_ID);
+    const body = document.getElementById('modal-body');
+    if (!history.length) { body.innerHTML = '<div class="modal-empty">还没有记录，快去挑战吧！🎮</div>'; }
+    else {
+      const bestHtml = best ? `<div style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:14px;font-weight:700;">🏆 最佳纪录</span><span style="font-size:20px;font-weight:800;">${best.label}</span></div>` : '';
+      body.innerHTML = bestHtml + history.map((h,i) => `<div class="history-row"><span class="h-rank">${MEDALS[i]||i+1}</span><span class="h-val">${h.label}</span><span class="h-date">${h.date}</span></div>`).join('');
+    }
+    document.getElementById('history-modal').classList.add('open');
+  }
+  function closeHistory(e) {
+    if (e && e.target !== document.getElementById('history-modal')) return;
+    document.getElementById('history-modal').classList.remove('open');
+  }
+
+  window.addEventListener('resize', () => { if (canvas) { canvas.width = canvas.offsetWidth; render(); } });
+  initLevelSelector();
+</script>
+</body>
+</html>

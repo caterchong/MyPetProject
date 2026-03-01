@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>谁说真话 — 数学趣味游戏</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .person-card {
+      background:#fff; border:2px solid #e5e7eb; border-radius:14px; padding:14px 16px;
+      margin-bottom:8px; transition:all .2s; cursor:default;
+    }
+    .person-card .person-name { font-size:15px; font-weight:700; margin-bottom:6px; }
+    .person-card .person-says { font-size:13px; color:var(--text); line-height:1.6; }
+    .answer-btns { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:4px; }
+    .assign-btn {
+      padding:10px; border-radius:10px; border:2px solid #e5e7eb;
+      background:#fff; font-size:13px; font-weight:700; cursor:pointer;
+      transition:all .15s; color:var(--muted);
+    }
+    .assign-btn.knight { border-color:var(--primary); background:#ede9fe; color:var(--primary-dark); }
+    .assign-btn.knave  { border-color:var(--danger); background:#fef2f2; color:var(--danger); }
+    .level-info {
+      background:linear-gradient(135deg,var(--primary),var(--primary-dark));
+      color:#fff; border-radius:12px; padding:10px 16px; margin-bottom:10px;
+      font-size:14px; font-weight:700;
+    }
+    .person-card.correct-reveal { border-color:var(--success); background:#f0fdf4; }
+    .person-card.wrong-reveal   { border-color:var(--danger); background:#fef2f2; }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="toast" id="toast"></div>
+  <div class="game-header">
+    <a class="btn-back" href="../index.html">← 返回</a>
+    <span class="game-header-title">🕵️ 谁说真话</span>
+    <span class="score-badge" id="score-badge">第1关</span>
+  </div>
+  <div class="main-content">
+    <div class="game-area">
+
+      <div class="game-intro-card" id="intro-card">
+        <h2>🕵️ 谁说真话</h2>
+        <p>
+          岛上住着两种人：<br>
+          <span style="color:var(--primary);font-weight:700;">⚔️ 骑士（Knight）</span>：永远说真话<br>
+          <span style="color:var(--danger);font-weight:700;">🗡️ 无赖（Knave）</span>：永远说假话<br><br>
+          根据每个人的陈述，判断每人身份。<br>推理越多关越难！
+        </p>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="openHistory()">📋 历史记录</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="startGame(0)">开始推理</button>
+        </div>
+      </div>
+
+      <div class="game-play-card hidden" id="play-card">
+        <div class="level-info" id="level-info">第 1 关 / 共 10 关</div>
+        <div id="puzzle-area"></div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="showHint()">💡 提示</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="submitAnswer()">✓ 提交答案</button>
+        </div>
+      </div>
+
+      <div class="game-result-card hidden" id="result-card">
+        <div class="result-title" id="result-title">🎉 推理正确！</div>
+        <div class="result-score" id="result-score">0</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:4px;">关通过</div>
+        <div class="result-record hidden" id="result-record">🏆 新纪录！</div>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="startGame(0)">从头开始</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="window.location.href='../index.html'">返回大厅</button>
+        </div>
+        <div class="mt16" id="history-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="modal-mask" id="history-modal" onclick="closeHistory(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <span class="modal-title">📋 历史记录</span>
+        <button class="modal-close" onclick="closeHistory()">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+</div>
+<script src="../js/storage.js"></script>
+<script>
+  const GAME_ID = 'truth-liar';
+
+  // Puzzles: each person has { name, says: string, isKnight: bool }
+  // Says is a description; we check with the solution array
+  const PUZZLES = [
+    // Level 1 - trivial
+    { people: [
+      { name: 'A', says: '"我是骑士。"', isKnight: true },
+      { name: 'B', says: '"A是骑士。"', isKnight: true },
+    ]},
+    // Level 2
+    { people: [
+      { name: 'A', says: '"我们两个都是无赖。"', isKnight: false },
+      { name: 'B', says: '"A在撒谎。"', isKnight: true },
+    ]},
+    // Level 3
+    { people: [
+      { name: 'A', says: '"B是无赖。"', isKnight: true },
+      { name: 'B', says: '"A是骑士。"', isKnight: false },
+      { name: 'C', says: '"B说了真话。"', isKnight: false },
+    ]},
+    // Level 4
+    { people: [
+      { name: 'A', says: '"我们三人中至少有一个骑士。"', isKnight: true },
+      { name: 'B', says: '"A是骑士。"', isKnight: true },
+      { name: 'C', says: '"B和我都是骑士。"', isKnight: false },
+    ]},
+    // Level 5
+    { people: [
+      { name: 'A', says: '"B和C是同一种人。"', isKnight: false },
+      { name: 'B', says: '"A和C是同一种人。"', isKnight: false },
+      { name: 'C', says: '"A和B不是同一种人。"', isKnight: true },
+    ]},
+    // Level 6
+    { people: [
+      { name: 'A', says: '"如果B是骑士，那么我也是骑士。"', isKnight: true },
+      { name: 'B', says: '"A是骑士当且仅当C是骑士。"', isKnight: false },
+      { name: 'C', says: '"我们三人中恰好有一个骑士。"', isKnight: false },
+    ]},
+    // Level 7
+    { people: [
+      { name: 'A', says: '"B是无赖，或者C是骑士。"', isKnight: true },
+      { name: 'B', says: '"A是骑士，且C是无赖。"', isKnight: false },
+      { name: 'C', says: '"A是骑士。"', isKnight: true },
+      { name: 'D', says: '"B说了假话。"', isKnight: true },
+    ]},
+    // Level 8
+    { people: [
+      { name: 'A', says: '"C是骑士。"', isKnight: false },
+      { name: 'B', says: '"A说了真话。"', isKnight: false },
+      { name: 'C', says: '"B是无赖。"', isKnight: true },
+      { name: 'D', says: '"A和B是同一种人。"', isKnight: true },
+    ]},
+    // Level 9
+    { people: [
+      { name: 'A', says: '"B是骑士。"', isKnight: false },
+      { name: 'B', says: '"C是骑士。"', isKnight: false },
+      { name: 'C', says: '"D是骑士。"', isKnight: false },
+      { name: 'D', says: '"A和B是不同种人。"', isKnight: true },
+    ]},
+    // Level 10
+    { people: [
+      { name: 'A', says: '"我们五人中骑士多于无赖。"', isKnight: true },
+      { name: 'B', says: '"A在说谎。"', isKnight: false },
+      { name: 'C', says: '"B说了真话。"', isKnight: false },
+      { name: 'D', says: '"C是骑士，且A是骑士。"', isKnight: false },
+      { name: 'E', says: '"D是无赖，我是骑士。"', isKnight: true },
+    ]},
+  ];
+
+  let currentLevel = 0;
+  let maxCleared = 0;
+  let assignments = {}; // name -> 'knight' | 'knave' | null
+
+  function startGame(lvl) {
+    currentLevel = lvl;
+    maxCleared = 0;
+    document.getElementById('intro-card').classList.add('hidden');
+    document.getElementById('result-card').classList.add('hidden');
+    loadLevel(lvl);
+  }
+
+  function loadLevel(lvl) {
+    assignments = {};
+    const puzzle = PUZZLES[lvl];
+    puzzle.people.forEach(p => assignments[p.name] = null);
+    document.getElementById('level-info').textContent = `第 ${lvl+1} 关 / 共 ${PUZZLES.length} 关`;
+    document.getElementById('score-badge').textContent = `第${lvl+1}关`;
+    document.getElementById('play-card').classList.remove('hidden');
+
+    const area = document.getElementById('puzzle-area');
+    area.innerHTML = puzzle.people.map(p => `
+      <div class="person-card" id="card-${p.name}">
+        <div class="person-name">👤 ${p.name}</div>
+        <div class="person-says">「${p.says}」</div>
+        <div class="answer-btns">
+          <button class="assign-btn" id="btn-${p.name}-knight" onclick="assign('${p.name}','knight')">⚔️ 骑士</button>
+          <button class="assign-btn" id="btn-${p.name}-knave"  onclick="assign('${p.name}','knave')">🗡️ 无赖</button>
+        </div>
+      </div>`).join('');
+  }
+
+  function assign(name, role) {
+    assignments[name] = role;
+    const p = PUZZLES[currentLevel].people.find(x => x.name === name);
+    ['knight','knave'].forEach(r => {
+      const btn = document.getElementById(`btn-${name}-${r}`);
+      btn.className = 'assign-btn' + (role === r ? ' ' + r : '');
+    });
+  }
+
+  function submitAnswer() {
+    const puzzle = PUZZLES[currentLevel];
+    const allAssigned = puzzle.people.every(p => assignments[p.name] !== null);
+    if (!allAssigned) { showToast('请为每个人选择身份！'); return; }
+
+    let allCorrect = true;
+    puzzle.people.forEach(p => {
+      const correct = (assignments[p.name] === 'knight') === p.isKnight;
+      const card = document.getElementById('card-' + p.name);
+      card.classList.remove('correct-reveal','wrong-reveal');
+      card.classList.add(correct ? 'correct-reveal' : 'wrong-reveal');
+      if (!correct) allCorrect = false;
+    });
+
+    if (allCorrect) {
+      maxCleared = currentLevel + 1;
+      setTimeout(() => {
+        if (currentLevel + 1 < PUZZLES.length) {
+          currentLevel++;
+          loadLevel(currentLevel);
+        } else {
+          endGame(true);
+        }
+      }, 1000);
+    } else {
+      showToast('有误！看看哪里出问题了…');
+    }
+  }
+
+  function showHint() {
+    const puzzle = PUZZLES[currentLevel];
+    const unknown = puzzle.people.filter(p => assignments[p.name] === null);
+    if (unknown.length > 0) {
+      const p = unknown[0];
+      assign(p.name, p.isKnight ? 'knight' : 'knave');
+      showToast(`提示：${p.name} 是${p.isKnight ? '骑士' : '无赖'}`);
+    } else {
+      showToast('所有人都已分配了！');
+    }
+  }
+
+  function endGame(completed) {
+    document.getElementById('play-card').classList.add('hidden');
+    document.getElementById('result-card').classList.remove('hidden');
+    document.getElementById('result-title').textContent = completed ? '🎉 全部通关！' : '加油，继续推理！';
+    document.getElementById('result-score').textContent = maxCleared;
+    const isRecord = Storage.saveRecord(GAME_ID, { value: maxCleared, label: `${maxCleared}关` }, 'higher');
+    if (isRecord) document.getElementById('result-record').classList.remove('hidden');
+    const history = Storage.getHistory(GAME_ID);
+    if (history.length) {
+      document.getElementById('history-list').innerHTML =
+        '<div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted);">历史记录</div>' +
+        history.slice(0,5).map(h=>`<div style="background:var(--bg);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;font-size:13px;"><span>${h.label}</span><span style="color:var(--muted)">${h.date}</span></div>`).join('');
+    }
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2000);
+  }
+
+  const MEDALS = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  function openHistory() {
+    const history = Storage.getHistory(GAME_ID);
+    const best = Storage.getRecord(GAME_ID);
+    const body = document.getElementById('modal-body');
+    if (!history.length) { body.innerHTML = '<div class="modal-empty">还没有记录，快去挑战吧！🎮</div>'; }
+    else {
+      const bestHtml = best ? `<div style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:14px;font-weight:700;">🏆 最佳纪录</span><span style="font-size:20px;font-weight:800;">${best.label}</span></div>` : '';
+      body.innerHTML = bestHtml + history.map((h,i) => `<div class="history-row"><span class="h-rank">${MEDALS[i]||i+1}</span><span class="h-val">${h.label}</span><span class="h-date">${h.date}</span></div>`).join('');
+    }
+    document.getElementById('history-modal').classList.add('open');
+  }
+  function closeHistory(e) {
+    if (e && e.target !== document.getElementById('history-modal')) return;
+    document.getElementById('history-modal').classList.remove('open');
+  }
+</script>
+</body>
+</html>

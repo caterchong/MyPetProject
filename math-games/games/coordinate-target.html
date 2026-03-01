@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>坐标射击 — 数学趣味游戏</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .coord-canvas-wrap { position:relative; text-align:center; margin:8px 0; }
+    canvas { border-radius:12px; background:#f8f9ff; cursor:crosshair; touch-action:none; }
+    .target-coord { font-size:20px; font-weight:800; text-align:center; color:var(--primary-dark); margin:6px 0; }
+    .hit-flash { font-size:22px; font-weight:800; text-align:center; height:28px; line-height:28px; }
+    .hit-flash.hit  { color:var(--success); }
+    .hit-flash.miss { color:var(--danger); }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="toast" id="toast"></div>
+  <div class="game-header">
+    <a class="btn-back" href="../index.html">← 返回</a>
+    <span class="game-header-title">🎯 坐标射击</span>
+    <span class="score-badge" id="score-badge">0 分</span>
+  </div>
+  <div class="main-content">
+    <div class="game-area">
+
+      <div class="game-intro-card" id="intro-card">
+        <h2>🎯 坐标射击</h2>
+        <p>根据给定的坐标 <strong>(x, y)</strong>，在坐标系中点击对应位置！<br><br>
+          坐标范围：-5 到 5<br>
+          点击越准确，得分越高。<br>
+          共 <strong>10题</strong>！</p>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="openHistory()">📋 历史记录</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="startGame()">开始射击</button>
+        </div>
+      </div>
+
+      <div class="game-play-card hidden" id="play-card" style="padding:12px;">
+        <div class="stats-row" style="margin-bottom:6px;">
+          <div class="stat-box"><div class="stat-val" id="round-val">1</div><div class="stat-label">题次/10</div></div>
+          <div class="stat-box"><div class="stat-val" id="total-score">0</div><div class="stat-label">总分</div></div>
+        </div>
+        <div style="font-size:13px;color:var(--muted);text-align:center;">点击坐标轴上的目标位置</div>
+        <div class="target-coord" id="target-coord">目标：(?, ?)</div>
+        <div class="coord-canvas-wrap">
+          <canvas id="coord-canvas" width="300" height="300"></canvas>
+        </div>
+        <div class="hit-flash" id="hit-flash">&nbsp;</div>
+      </div>
+
+      <div class="game-result-card hidden" id="result-card">
+        <div class="result-title">🎯 射击结束！</div>
+        <div class="result-score" id="result-score">0</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:4px;">/ 1000分</div>
+        <div class="result-record hidden" id="result-record">🏆 新纪录！</div>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="startGame()">再来</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="window.location.href='../index.html'">返回大厅</button>
+        </div>
+        <div class="mt16" id="history-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="modal-mask" id="history-modal" onclick="closeHistory(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header"><span class="modal-title">📋 历史记录</span><button class="modal-close" onclick="closeHistory()">✕</button></div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+</div>
+<script src="../js/storage.js"></script>
+<script>
+  const GAME_ID = 'coordinate-target';
+  const TOTAL = 10;
+  let round=0, totalScore=0, tx=0, ty=0, canClick=true;
+  let canvas, ctx;
+  const GRID=5; // -5 to 5
+
+  function startGame(){
+    round=0;totalScore=0;
+    canvas=document.getElementById('coord-canvas');
+    ctx=canvas.getContext('2d');
+    canvas.addEventListener('click',onCanvasClick);
+    canvas.addEventListener('touchend',onCanvasTouch,{passive:false});
+    document.getElementById('intro-card').classList.add('hidden');
+    document.getElementById('result-card').classList.add('hidden');
+    document.getElementById('play-card').classList.remove('hidden');
+    nextRound();
+  }
+
+  function nextRound(){
+    round++;canClick=true;
+    tx=Math.floor(Math.random()*11)-5; // -5 to 5
+    ty=Math.floor(Math.random()*11)-5;
+    document.getElementById('round-val').textContent=round;
+    document.getElementById('total-score').textContent=totalScore;
+    document.getElementById('score-badge').textContent=totalScore+' 分';
+    document.getElementById('target-coord').textContent=`目标：(${tx}, ${ty})`;
+    document.getElementById('hit-flash').innerHTML='&nbsp;';
+    drawGrid(null,null);
+  }
+
+  function toCanvas(gx,gy){
+    const W=canvas.width,H=canvas.height;
+    const margin=30;
+    const x=margin+(gx+GRID)/(GRID*2)*(W-margin*2);
+    const y=margin+(GRID-gy)/(GRID*2)*(H-margin*2);
+    return{x,y};
+  }
+
+  function toGrid(cx,cy){
+    const W=canvas.width,H=canvas.height;
+    const margin=30;
+    const gx=(cx-margin)/(W-margin*2)*GRID*2-GRID;
+    const gy=GRID-(cy-margin)/(H-margin*2)*GRID*2;
+    return{gx:Math.round(gx),gy:Math.round(gy)};
+  }
+
+  function drawGrid(clickX,clickY){
+    const W=canvas.width,H=canvas.height;
+    ctx.clearRect(0,0,W,H);
+    const margin=30;
+    // Grid lines
+    for(let i=-GRID;i<=GRID;i++){
+      const {x}=toCanvas(i,0);const {y}=toCanvas(0,i);
+      ctx.strokeStyle='#e5e7eb';ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(x,margin);ctx.lineTo(x,H-margin);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(margin,y);ctx.lineTo(W-margin,y);ctx.stroke();
+      if(i!==0){
+        ctx.fillStyle='#94a3b8';ctx.font='10px sans-serif';ctx.textAlign='center';
+        ctx.fillText(i,x,H-margin+12);
+        ctx.textAlign='right';ctx.fillText(i,margin-4,y+4);
+      }
+    }
+    // Axes
+    const ox=toCanvas(0,0);
+    ctx.strokeStyle='#475569';ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(margin,ox.y);ctx.lineTo(W-margin,ox.y);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(ox.x,margin);ctx.lineTo(ox.x,H-margin);ctx.stroke();
+    ctx.fillStyle='#475569';ctx.font='bold 11px sans-serif';ctx.textAlign='center';
+    ctx.fillText('x',W-margin+8,ox.y+4);ctx.textAlign='left';ctx.fillText('y',ox.x+4,margin-4);
+    ctx.fillText('O',ox.x+4,ox.y+12);
+    // Target
+    const {x:txc,y:tyc}=toCanvas(tx,ty);
+    ctx.beginPath();ctx.arc(txc,tyc,8,0,2*Math.PI);
+    ctx.fillStyle='rgba(239,68,68,0.3)';ctx.fill();
+    ctx.strokeStyle='#ef4444';ctx.lineWidth=2;ctx.stroke();
+    // Click marker
+    if(clickX!==null){
+      ctx.beginPath();ctx.arc(clickX,clickY,5,0,2*Math.PI);
+      ctx.fillStyle='var(--primary)';ctx.fill();
+      // Line to target
+      ctx.beginPath();ctx.moveTo(clickX,clickY);ctx.lineTo(txc,tyc);
+      ctx.strokeStyle='#667eea';ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.stroke();ctx.setLineDash([]);
+    }
+  }
+
+  function onCanvasClick(e){
+    if(!canClick)return;
+    const rect=canvas.getBoundingClientRect();
+    const scaleX=canvas.width/rect.width;
+    const scaleY=canvas.height/rect.height;
+    handleClick((e.clientX-rect.left)*scaleX,(e.clientY-rect.top)*scaleY);
+  }
+
+  function onCanvasTouch(e){
+    e.preventDefault();
+    if(!canClick)return;
+    const touch=e.changedTouches[0];
+    const rect=canvas.getBoundingClientRect();
+    const scaleX=canvas.width/rect.width;
+    const scaleY=canvas.height/rect.height;
+    handleClick((touch.clientX-rect.left)*scaleX,(touch.clientY-rect.top)*scaleY);
+  }
+
+  function handleClick(cx,cy){
+    canClick=false;
+    const {gx,gy}=toGrid(cx,cy);
+    const clamped={gx:Math.max(-GRID,Math.min(GRID,gx)),gy:Math.max(-GRID,Math.min(GRID,gy))};
+    drawGrid(cx,cy);
+    const dist=Math.sqrt((clamped.gx-tx)**2+(clamped.gy-ty)**2);
+    let pts=0;
+    if(dist===0)pts=100;
+    else if(dist<=1)pts=70;
+    else if(dist<=2)pts=40;
+    else if(dist<=3)pts=15;
+    totalScore+=pts;
+    const fb=document.getElementById('hit-flash');
+    if(pts===100){fb.textContent='💯 完美命中！';fb.className='hit-flash hit';}
+    else if(pts>0){fb.textContent=`差了${dist.toFixed(1)}格 +${pts}分`;fb.className='hit-flash hit';}
+    else{fb.textContent=`偏差太大，0分`;fb.className='hit-flash miss';}
+    setTimeout(()=>{if(round>=TOTAL){endGame();}else{nextRound();}},1000);
+  }
+
+  function endGame(){
+    document.getElementById('play-card').classList.add('hidden');
+    document.getElementById('result-card').classList.remove('hidden');
+    document.getElementById('result-score').textContent=totalScore;
+    const isRecord=Storage.saveRecord(GAME_ID,{value:totalScore,label:`${totalScore}分`},'higher');
+    if(isRecord)document.getElementById('result-record').classList.remove('hidden');
+    const history=Storage.getHistory(GAME_ID);
+    if(history.length)document.getElementById('history-list').innerHTML='<div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted);">历史记录</div>'+history.slice(0,5).map(h=>`<div style="background:var(--bg);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;font-size:13px;"><span>${h.label}</span><span style="color:var(--muted)">${h.date}</span></div>`).join('');
+  }
+
+  const MEDALS=['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  function openHistory(){const h=Storage.getHistory(GAME_ID);const b=Storage.getRecord(GAME_ID);const body=document.getElementById('modal-body');if(!h.length){body.innerHTML='<div class="modal-empty">还没有记录！🎮</div>';}else{const bh=b?`<div style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:14px;font-weight:700;">🏆 最佳纪录</span><span style="font-size:20px;font-weight:800;">${b.label}</span></div>`:'';body.innerHTML=bh+h.map((x,i)=>`<div class="history-row"><span class="h-rank">${MEDALS[i]||i+1}</span><span class="h-val">${x.label}</span><span class="h-date">${x.date}</span></div>`).join('');}document.getElementById('history-modal').classList.add('open');}
+  function closeHistory(e){if(e&&e.target!==document.getElementById('history-modal'))return;document.getElementById('history-modal').classList.remove('open');}
+</script>
+</body>
+</html>

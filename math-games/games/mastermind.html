@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>数字猜谜 — 数学趣味游戏</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .digit-input-row { display:flex; gap:8px; justify-content:center; margin:8px 0; }
+    .digit-box {
+      width:52px; height:64px; border:2px solid #e5e7eb; border-radius:12px;
+      font-size:28px; font-weight:800; text-align:center; color:var(--primary-dark);
+      background:#fff; outline:none; transition:border-color .2s;
+    }
+    .digit-box:focus { border-color:var(--primary); }
+    .guess-row {
+      display:flex; align-items:center; gap:10px; padding:10px 12px;
+      background:var(--bg); border-radius:12px; margin-bottom:6px;
+    }
+    .guess-digits { display:flex; gap:6px; }
+    .guess-d {
+      width:36px; height:36px; border-radius:8px; background:#fff;
+      border:2px solid #e5e7eb; display:flex; align-items:center; justify-content:center;
+      font-size:18px; font-weight:700;
+    }
+    .guess-d.bull { background:var(--primary); color:#fff; border-color:var(--primary); }
+    .guess-d.cow  { background:var(--warning); color:#fff; border-color:var(--warning); }
+    .hints { display:flex; gap:4px; margin-left:auto; flex-direction:column; align-items:flex-end; }
+    .hint-badge { font-size:12px; font-weight:700; padding:2px 8px; border-radius:99px; }
+    .hint-bull { background:#ede9fe; color:var(--primary-dark); }
+    .hint-cow  { background:#fef3c7; color:#92400e; }
+    .numpad { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin:8px 0; }
+    .numpad-btn {
+      padding:14px 0; border-radius:12px; border:2px solid #e5e7eb;
+      background:#fff; font-size:20px; font-weight:700; color:var(--text); cursor:pointer;
+      transition:all .15s;
+    }
+    .numpad-btn:active { background:var(--primary); color:#fff; border-color:var(--primary); }
+    .numpad-btn.del { background:#fef2f2; color:var(--danger); border-color:var(--danger); }
+    .attempts-label { font-size:13px; color:var(--muted); text-align:center; }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="toast" id="toast"></div>
+  <div class="game-header">
+    <a class="btn-back" href="../index.html">← 返回</a>
+    <span class="game-header-title">🔐 数字猜谜</span>
+    <span class="score-badge" id="score-badge">0/10</span>
+  </div>
+  <div class="main-content">
+    <div class="game-area">
+
+      <div class="game-intro-card" id="intro-card">
+        <h2>🔐 数字猜谜</h2>
+        <p>系统生成一个 <strong>4位不重复</strong> 的数字（0-9）。<br>每次猜测后告诉你：<br>
+          <span style="color:var(--primary);font-weight:700;">🟣 Bull</span> = 数字和位置都对<br>
+          <span style="color:var(--warning);font-weight:700;">🟡 Cow</span> = 数字对但位置错<br><br>
+          最多猜 <strong>10次</strong>，越少越好！</p>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="openHistory()">📋 历史记录</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="startGame()">开始游戏</button>
+        </div>
+      </div>
+
+      <div class="game-play-card hidden" id="play-card">
+        <div class="attempts-label">已猜 <span id="attempt-num">0</span> / 10 次</div>
+        <div class="digit-input-row" id="input-row">
+          <div class="digit-box" id="d0">-</div>
+          <div class="digit-box" id="d1">-</div>
+          <div class="digit-box" id="d2">-</div>
+          <div class="digit-box" id="d3">-</div>
+        </div>
+        <div class="numpad" id="numpad"></div>
+        <button class="btn btn-primary" onclick="submitGuess()" id="submit-btn">提交猜测</button>
+        <div style="margin-top:12px;" id="guess-history"></div>
+      </div>
+
+      <div class="game-result-card hidden" id="result-card">
+        <div class="result-title" id="result-title">🎉 猜中了！</div>
+        <div class="result-score" id="result-score">0</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:4px;">次猜中</div>
+        <div class="result-record hidden" id="result-record">🏆 新纪录！</div>
+        <div style="font-size:14px;color:var(--muted);" id="answer-reveal"></div>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="startGame()">再来一局</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="window.location.href='../index.html'">返回大厅</button>
+        </div>
+        <div class="mt16" id="history-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="modal-mask" id="history-modal" onclick="closeHistory(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <span class="modal-title">📋 历史记录</span>
+        <button class="modal-close" onclick="closeHistory()">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+</div>
+<script src="../js/storage.js"></script>
+<script>
+  const GAME_ID = 'mastermind';
+  let secret = [];
+  let current = [];
+  let attempts = 0;
+  let gameOver = false;
+
+  function generateSecret() {
+    const digits = [0,1,2,3,4,5,6,7,8,9];
+    const s = [];
+    while (s.length < 4) {
+      const i = Math.floor(Math.random() * digits.length);
+      s.push(digits.splice(i,1)[0]);
+    }
+    return s;
+  }
+
+  function startGame() {
+    secret = generateSecret();
+    current = [];
+    attempts = 0;
+    gameOver = false;
+    renderInput();
+    renderNumpad();
+    document.getElementById('guess-history').innerHTML = '';
+    document.getElementById('attempt-num').textContent = '0';
+    document.getElementById('score-badge').textContent = '0/10';
+    document.getElementById('intro-card').classList.add('hidden');
+    document.getElementById('result-card').classList.add('hidden');
+    document.getElementById('play-card').classList.remove('hidden');
+  }
+
+  function renderInput() {
+    for (let i = 0; i < 4; i++) {
+      document.getElementById('d'+i).textContent = current[i] !== undefined ? current[i] : '-';
+    }
+  }
+
+  function renderNumpad() {
+    const pad = document.getElementById('numpad');
+    pad.innerHTML = [0,1,2,3,4,5,6,7,8,9].map(n =>
+      `<button class="numpad-btn" onclick="pressDigit(${n})">${n}</button>`
+    ).join('') + `<button class="numpad-btn del" onclick="deleteDigit()">⌫</button>`;
+  }
+
+  function pressDigit(n) {
+    if (gameOver || current.length >= 4) return;
+    if (current.includes(n)) { showToast('不能重复！'); return; }
+    current.push(n);
+    renderInput();
+  }
+
+  function deleteDigit() {
+    if (gameOver) return;
+    current.pop();
+    renderInput();
+  }
+
+  function submitGuess() {
+    if (gameOver) return;
+    if (current.length < 4) { showToast('请输入4位数字'); return; }
+    attempts++;
+    document.getElementById('attempt-num').textContent = attempts;
+    document.getElementById('score-badge').textContent = `${attempts}/10`;
+
+    let bulls = 0, cows = 0;
+    current.forEach((d, i) => {
+      if (d === secret[i]) bulls++;
+      else if (secret.includes(d)) cows++;
+    });
+
+    addGuessRow([...current], bulls, cows);
+    current = [];
+    renderInput();
+
+    if (bulls === 4) {
+      endGame(true);
+    } else if (attempts >= 10) {
+      endGame(false);
+    }
+  }
+
+  function addGuessRow(digits, bulls, cows) {
+    const row = document.createElement('div');
+    row.className = 'guess-row';
+    const bullClass = (d, i) => d === secret[i] ? 'bull' : secret.includes(d) ? 'cow' : '';
+    row.innerHTML = `
+      <div class="guess-digits">${digits.map((d,i)=>`<div class="guess-d ${bullClass(d,i)}">${d}</div>`).join('')}</div>
+      <div class="hints">
+        <span class="hint-badge hint-bull">🟣 ${bulls} Bull</span>
+        <span class="hint-badge hint-cow">🟡 ${cows} Cow</span>
+      </div>`;
+    const hist = document.getElementById('guess-history');
+    hist.prepend(row);
+  }
+
+  function endGame(success) {
+    gameOver = true;
+    document.getElementById('play-card').classList.add('hidden');
+    document.getElementById('result-card').classList.remove('hidden');
+    document.getElementById('result-title').textContent = success ? '🎉 猜中了！' : '😅 揭晓答案';
+    document.getElementById('result-score').textContent = attempts;
+    document.getElementById('answer-reveal').textContent = `答案是：${secret.join(' ')}`;
+    if (success) {
+      const isRecord = Storage.saveRecord(GAME_ID, { value: attempts, label: `${attempts}次` }, 'lower');
+      if (isRecord) document.getElementById('result-record').classList.remove('hidden');
+    }
+    const history = Storage.getHistory(GAME_ID);
+    if (history.length) {
+      document.getElementById('history-list').innerHTML =
+        '<div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted);">历史记录</div>' +
+        history.slice(0,5).map(h=>`<div style="background:var(--bg);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;font-size:13px;"><span>${h.label}</span><span style="color:var(--muted)">${h.date}</span></div>`).join('');
+    }
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1800);
+  }
+
+  const MEDALS = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  function openHistory() {
+    const history = Storage.getHistory(GAME_ID);
+    const best = Storage.getRecord(GAME_ID);
+    const body = document.getElementById('modal-body');
+    if (!history.length) { body.innerHTML = '<div class="modal-empty">还没有记录，快去挑战吧！🎮</div>'; }
+    else {
+      const bestHtml = best ? `<div style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:14px;font-weight:700;">🏆 最佳纪录</span><span style="font-size:20px;font-weight:800;">${best.label}</span></div>` : '';
+      body.innerHTML = bestHtml + history.map((h,i) => `<div class="history-row"><span class="h-rank">${MEDALS[i]||i+1}</span><span class="h-val">${h.label}</span><span class="h-date">${h.date}</span></div>`).join('');
+    }
+    document.getElementById('history-modal').classList.add('open');
+  }
+  function closeHistory(e) {
+    if (e && e.target !== document.getElementById('history-modal')) return;
+    document.getElementById('history-modal').classList.remove('open');
+  }
+</script>
+</body>
+</html>

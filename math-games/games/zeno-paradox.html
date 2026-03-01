@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>芝诺悖论 — 数学趣味游戏</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .track-wrap { position:relative; margin:12px 0; height:60px; background:var(--bg); border-radius:12px; overflow:hidden; }
+    .track-line { position:absolute; bottom:20px; left:16px; right:16px; height:3px; background:#cbd5e1; border-radius:2px; }
+    .runner { position:absolute; bottom:22px; font-size:24px; transition:left 0.5s ease; transform:translateX(-50%); }
+    .finish-flag { position:absolute; bottom:14px; right:10px; font-size:24px; }
+    .sum-display { font-size:32px; font-weight:900; text-align:center; color:var(--primary); margin:6px 0; letter-spacing:1px; }
+    .fraction-row { display:flex; flex-wrap:wrap; gap:4px; justify-content:center; margin:6px 0; }
+    .frac-chip { padding:4px 10px; border-radius:99px; background:#ede9fe; color:var(--primary); font-size:12px; font-weight:700; }
+    .frac-chip.new { background:var(--primary); color:#fff; }
+    .step-info { font-size:13px; text-align:center; color:var(--muted); line-height:1.6; margin:4px 0; }
+    .level-bar { height:8px; background:#e5e7eb; border-radius:99px; margin:6px 0; overflow:hidden; }
+    .level-fill { height:100%; background:linear-gradient(90deg,var(--primary),var(--accent)); border-radius:99px; transition:width .5s; }
+    .paradox-box { background:#fef9c3; border:2px solid #fde047; border-radius:12px; padding:12px; margin:8px 0; font-size:13px; color:#713f12; line-height:1.6; }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="toast" id="toast"></div>
+  <div class="game-header">
+    <a class="btn-back" href="../index.html">← 返回</a>
+    <span class="game-header-title">∞ 芝诺悖论</span>
+    <span class="score-badge" id="score-badge">第1关</span>
+  </div>
+  <div class="main-content">
+    <div class="game-area">
+
+      <div class="game-intro-card" id="intro-card">
+        <h2>∞ 芝诺悖论</h2>
+        <p>古希腊哲学家芝诺说：<br>
+          <strong>阿喀琉斯追不上乌龟！</strong><br><br>
+          因为每次到达乌龟的位置时，乌龟又前进了一点……<br>
+          这样无限循环，岂不是永远追不上？<br><br>
+          但数学告诉我们：<strong>无穷多个数相加，可以等于有限值！</strong><br><br>
+          亲手体验无穷级数收敛，每关解锁不同级数！</p>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="openHistory()">📋 历史记录</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="startGame()">开始体验</button>
+        </div>
+      </div>
+
+      <div class="game-play-card hidden" id="play-card" style="padding:12px;">
+        <div class="stats-row" style="margin-bottom:6px;">
+          <div class="stat-box"><div class="stat-val" id="level-val">1</div><div class="stat-label">关卡</div></div>
+          <div class="stat-box"><div class="stat-val" id="steps-val">0</div><div class="stat-label">已加步数</div></div>
+          <div class="stat-box"><div class="stat-val" id="target-val">?</div><div class="stat-label">目标和</div></div>
+        </div>
+
+        <div class="track-wrap">
+          <div class="track-line"></div>
+          <div class="runner" id="runner">🏃</div>
+          <div class="finish-flag">🏁</div>
+        </div>
+
+        <div class="sum-display" id="sum-display">0</div>
+        <div class="step-info" id="step-info">点击"加一步"，感受无限相加</div>
+        <div class="level-bar"><div class="level-fill" id="level-fill" style="width:0%"></div></div>
+        <div class="fraction-row" id="frac-row"></div>
+
+        <div class="paradox-box" id="paradox-box" style="display:none;"></div>
+
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="btn btn-outline" style="flex:1;" id="add-btn" onclick="addStep()">➕ 加一步</button>
+          <button class="btn btn-primary" style="flex:1;" id="auto-btn" onclick="autoRun()">⚡ 自动加</button>
+        </div>
+        <button class="btn btn-success mt8 hidden" id="next-level-btn" onclick="nextLevel()" style="width:100%;"></button>
+      </div>
+
+      <div class="game-result-card hidden" id="result-card">
+        <div class="result-title">∞ 悖论已破解！</div>
+        <div class="result-score" id="result-score">0</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:4px;">关卡通过</div>
+        <div class="result-record hidden" id="result-record">🏆 新纪录！</div>
+        <div style="background:var(--bg);border-radius:12px;padding:14px;font-size:13px;line-height:1.8;margin-bottom:12px;" id="result-comment"></div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="startGame()">再来一次</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="window.location.href='../index.html'">返回大厅</button>
+        </div>
+        <div class="mt16" id="history-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="modal-mask" id="history-modal" onclick="closeHistory(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header"><span class="modal-title">📋 历史记录</span><button class="modal-close" onclick="closeHistory()">✕</button></div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+</div>
+<script src="../js/storage.js"></script>
+<script>
+  const GAME_ID = 'zeno-paradox';
+
+  // Each level: a series that converges
+  const LEVELS = [
+    {
+      name: '等比级数 1/2^n',
+      target: 1,
+      targetLabel: '1',
+      getTerm: (n) => 1 / Math.pow(2, n), // 1/2 + 1/4 + 1/8 + ...
+      getFracLabel: (n) => `1/${Math.pow(2,n)}`,
+      description: '芝诺悖论原版：每步走剩余距离的一半。\n1/2 + 1/4 + 1/8 + 1/16 + ... = 1\n无穷多步，有限距离！',
+      stepsToPass: 8,
+    },
+    {
+      name: '等比级数 1/3^n',
+      target: 0.5,
+      targetLabel: '1/2',
+      getTerm: (n) => 1 / Math.pow(3, n), // 1/3 + 1/9 + 1/27 + ...
+      getFracLabel: (n) => `1/${Math.pow(3,n)}`,
+      description: '每步走剩余距离的1/3。\n1/3 + 1/9 + 1/27 + ... = 1/2\n收敛速度更慢，但同样收敛！',
+      stepsToPass: 8,
+    },
+    {
+      name: '调和级数 1/n(n+1)',
+      target: 1,
+      targetLabel: '1',
+      getTerm: (n) => 1 / (n * (n + 1)), // 1/2 + 1/6 + 1/12 + ...
+      getFracLabel: (n) => `1/${n*(n+1)}`,
+      description: '裂项级数：1/(1×2) + 1/(2×3) + 1/(3×4) + ... = 1\n每项 = 1/n - 1/(n+1)，累加后神奇抵消！',
+      stepsToPass: 8,
+    },
+    {
+      name: '等比级数 2/3^n',
+      target: 1,
+      targetLabel: '1',
+      getTerm: (n) => 2 / Math.pow(3, n), // 2/3 + 2/9 + 2/27 + ...
+      getFracLabel: (n) => `2/${Math.pow(3,n)}`,
+      description: '谢尔宾斯基三角中的面积比例！\n2/3 + 2/9 + 2/27 + ... = 1\n每次填充剩余三角的2/3面积。',
+      stepsToPass: 8,
+    },
+    {
+      name: '平方倒数 π²/6',
+      target: Math.PI * Math.PI / 6,
+      targetLabel: 'π²/6',
+      getTerm: (n) => 1 / (n * n), // 1 + 1/4 + 1/9 + ...
+      getFracLabel: (n) => `1/${n*n}`,
+      description: '欧拉惊人发现：1 + 1/4 + 1/9 + 1/16 + ... = π²/6 ≈ 1.6449\n自然数平方的倒数之和，竟然和π有关！',
+      stepsToPass: 10,
+    }
+  ];
+
+  let level = 0, step = 0, currentSum = 0, autoTimer = null, clearedLevels = 0;
+
+  function startGame() {
+    level = 0; clearedLevels = 0;
+    document.getElementById('intro-card').classList.add('hidden');
+    document.getElementById('result-card').classList.add('hidden');
+    loadLevel();
+  }
+
+  function loadLevel() {
+    step = 0; currentSum = 0;
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+    const lv = LEVELS[level];
+
+    document.getElementById('level-val').textContent = level + 1;
+    document.getElementById('score-badge').textContent = `第${level + 1}关`;
+    document.getElementById('steps-val').textContent = 0;
+    document.getElementById('target-val').textContent = lv.targetLabel;
+    document.getElementById('sum-display').textContent = '0';
+    document.getElementById('step-info').textContent = `${lv.name}：点击"加一步"`;
+    document.getElementById('level-fill').style.width = '0%';
+    document.getElementById('frac-row').innerHTML = '';
+    document.getElementById('paradox-box').style.display = 'none';
+    document.getElementById('next-level-btn').classList.add('hidden');
+    document.getElementById('add-btn').disabled = false;
+    document.getElementById('auto-btn').disabled = false;
+    document.getElementById('play-card').classList.remove('hidden');
+    updateRunner(0);
+  }
+
+  function addStep() {
+    const lv = LEVELS[level];
+    step++;
+    const term = lv.getTerm(step);
+    currentSum += term;
+    document.getElementById('steps-val').textContent = step;
+
+    // Update sum display
+    const ratio = Math.min(currentSum / lv.target, 0.9999);
+    document.getElementById('sum-display').textContent = currentSum.toFixed(6);
+    document.getElementById('step-info').textContent =
+      `加了 ${lv.getFracLabel(step)} → 已达目标的 ${(ratio * 100).toFixed(2)}%`;
+    document.getElementById('level-fill').style.width = (ratio * 100) + '%';
+    updateRunner(ratio);
+
+    // Fraction chips (max 8 shown)
+    const fc = document.getElementById('frac-row');
+    if (step <= 8) {
+      const chip = document.createElement('div');
+      chip.className = 'frac-chip new';
+      chip.textContent = lv.getFracLabel(step);
+      fc.appendChild(chip);
+      setTimeout(() => chip.classList.remove('new'), 300);
+    } else if (step === 9) {
+      const more = document.createElement('div');
+      more.className = 'frac-chip';
+      more.textContent = '…';
+      fc.appendChild(more);
+    }
+
+    // Pass condition: enough steps and close to target
+    if (step >= lv.stepsToPass && ratio >= 0.99) {
+      passLevel();
+    }
+  }
+
+  function updateRunner(ratio) {
+    // Track: from 16px to (width - 40px)
+    const wrap = document.querySelector('.track-wrap');
+    const trackWidth = wrap.offsetWidth - 56; // left:16, right:40
+    const left = 16 + ratio * trackWidth;
+    document.getElementById('runner').style.left = left + 'px';
+  }
+
+  function autoRun() {
+    if (autoTimer) {
+      clearInterval(autoTimer);
+      autoTimer = null;
+      document.getElementById('auto-btn').textContent = '⚡ 自动加';
+      return;
+    }
+    document.getElementById('auto-btn').textContent = '⏸ 暂停';
+    autoTimer = setInterval(() => {
+      addStep();
+      const lv = LEVELS[level];
+      const ratio = Math.min(currentSum / lv.target, 0.9999);
+      if (step >= lv.stepsToPass && ratio >= 0.99) {
+        clearInterval(autoTimer);
+        autoTimer = null;
+        document.getElementById('auto-btn').textContent = '⚡ 自动加';
+      }
+    }, 400);
+  }
+
+  function passLevel() {
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+    document.getElementById('auto-btn').textContent = '⚡ 自动加';
+    document.getElementById('add-btn').disabled = true;
+    document.getElementById('auto-btn').disabled = true;
+    clearedLevels = level + 1;
+
+    const lv = LEVELS[level];
+    document.getElementById('level-fill').style.width = '100%';
+    document.getElementById('sum-display').textContent = lv.target.toFixed(6);
+    updateRunner(1);
+
+    // Show description
+    const pb = document.getElementById('paradox-box');
+    pb.textContent = '💡 ' + lv.description;
+    pb.style.display = 'block';
+
+    const nextBtn = document.getElementById('next-level-btn');
+    if (level + 1 >= LEVELS.length) {
+      nextBtn.textContent = '查看最终结果 🎉';
+    } else {
+      nextBtn.textContent = `第 ${level + 2} 关 →`;
+    }
+    nextBtn.classList.remove('hidden');
+    showToast(`🎉 第${level + 1}关通过！`);
+  }
+
+  function nextLevel() {
+    level++;
+    if (level >= LEVELS.length) {
+      endGame();
+    } else {
+      loadLevel();
+    }
+  }
+
+  function endGame() {
+    document.getElementById('play-card').classList.add('hidden');
+    document.getElementById('result-card').classList.remove('hidden');
+    document.getElementById('result-score').textContent = clearedLevels;
+    let comment = '';
+    if (clearedLevels >= 5) comment = '你已完全掌握无穷级数！芝诺的悖论在数学面前不堪一击。';
+    else if (clearedLevels >= 3) comment = '很棒！你感受到了无穷收敛的魅力，继续探索吧！';
+    else comment = '芝诺悖论很有趣对吗？再试一次，看看更多的级数！';
+    document.getElementById('result-comment').innerHTML =
+      `通过了 <b>${clearedLevels}/${LEVELS.length}</b> 关<br><br>` +
+      `<b>芝诺悖论的答案：</b><br>` +
+      `无穷多项之和可以是有限数！<br>` +
+      `关键是每项必须<b>足够快地趋近于0</b>。<br>` +
+      `这就是微积分和极限理论的基础。<br><br>` +
+      `<span style="color:var(--muted);">${comment}</span>`;
+    const isRecord = Storage.saveRecord(GAME_ID, {value: clearedLevels, label: `${clearedLevels}关`}, 'higher');
+    if (isRecord) document.getElementById('result-record').classList.remove('hidden');
+    const history = Storage.getHistory(GAME_ID);
+    if (history.length) document.getElementById('history-list').innerHTML = '<div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted);">历史记录</div>' + history.slice(0, 5).map(h => `<div style="background:var(--bg);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;font-size:13px;"><span>${h.label}</span><span style="color:var(--muted)">${h.date}</span></div>`).join('');
+  }
+
+  function showToast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2500); }
+  const MEDALS = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  function openHistory() { const h = Storage.getHistory(GAME_ID); const b = Storage.getRecord(GAME_ID); const body = document.getElementById('modal-body'); if (!h.length) { body.innerHTML = '<div class="modal-empty">还没有记录！🎮</div>'; } else { const bh = b ? `<div style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:14px;font-weight:700;">🏆 最佳纪录</span><span style="font-size:20px;font-weight:800;">${b.label}</span></div>` : ''; body.innerHTML = bh + h.map((x, i) => `<div class="history-row"><span class="h-rank">${MEDALS[i] || i + 1}</span><span class="h-val">${x.label}</span><span class="h-date">${x.date}</span></div>`).join(''); } document.getElementById('history-modal').classList.add('open'); }
+  function closeHistory(e) { if (e && e.target !== document.getElementById('history-modal')) return; document.getElementById('history-modal').classList.remove('open'); }
+</script>
+</body>
+</html>

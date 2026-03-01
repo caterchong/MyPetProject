@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>数学趣味游戏</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .hub-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+      padding: 32px 20px 48px;
+      text-align: center;
+    }
+    .hub-header .logo { font-size: 48px; margin-bottom: 8px; }
+    .hub-header h1   { font-size: 24px; font-weight: 800; letter-spacing: 1px; }
+    .hub-header p    { font-size: 13px; opacity: 0.85; margin-top: 4px; }
+    .hub-history-btn {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: rgba(255,255,255,0.2);
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      padding: 8px 10px;
+      font-size: 20px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .hub-history-btn:hover { background: rgba(255,255,255,0.35); }
+    .hist-game-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      background: var(--bg);
+      border-radius: 14px;
+      margin-bottom: 8px;
+    }
+    .hist-game-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+    .hist-game-info { flex: 1; min-width: 0; }
+    .hist-game-title { font-size: 14px; font-weight: 700; }
+    .hist-game-record { font-size: 12px; color: var(--primary); font-weight: 600; margin-top: 2px; }
+    .hist-game-date { font-size: 11px; color: var(--muted); margin-top: 1px; }
+    .hub-wave {
+      height: 28px;
+      background: #f0f2ff;
+      border-radius: 28px 28px 0 0;
+      margin-top: -24px;
+    }
+    .games-grid { background: #f0f2ff; padding: 12px 16px 8px; }
+    .section-panel { background: #f0f2ff; }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <!-- Header -->
+  <div class="hub-header">
+    <button class="hub-history-btn" onclick="openHistory()" title="历史记录">📋</button>
+    <div class="logo">🧮</div>
+    <h1>数学趣味游戏</h1>
+    <p>开动脑筋，享受数学的乐趣</p>
+  </div>
+  <div class="hub-wave"></div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+
+    <!-- 游戏面板 -->
+    <div class="panel active" id="panel-games">
+      <!-- 视图切换工具栏 -->
+      <div class="view-toolbar">
+        <span style="font-size:12px;color:var(--muted);margin-right:4px;">视图</span>
+        <button class="view-btn active" id="btn-list-view" onclick="setView('list')" title="列表视图">☰</button>
+        <button class="view-btn" id="btn-icon-view" onclick="setView('icon')" title="图标视图">⊞</button>
+      </div>
+      <div class="games-grid" id="games-grid">
+        <!-- cards injected by JS -->
+      </div>
+    </div>
+
+    <!-- 反馈面板 -->
+    <div class="panel" id="panel-feedback">
+      <div class="section-panel">
+        <div class="card-panel">
+          <h3>💬 你希望玩哪些游戏？</h3>
+          <textarea class="feedback-input" id="feedback-input" placeholder="例如：我想要数独、华容道……"></textarea>
+          <button class="btn btn-primary" onclick="submitFeedback()">提交建议</button>
+        </div>
+        <div class="card-panel">
+          <h3>📋 已收到的建议</h3>
+          <div class="feedback-list" id="feedback-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 捐赠面板 -->
+    <div class="panel" id="panel-donate">
+      <div class="section-panel">
+        <div class="card-panel" style="text-align:center;">
+          <h3 style="margin-bottom:16px;">❤️ 支持作者</h3>
+          <!-- 微信收款二维码占位 — 替换成真实图片路径即可 -->
+          <svg class="donate-qr" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+            <rect width="200" height="200" fill="#f0f2ff" rx="12"/>
+            <text x="100" y="80" text-anchor="middle" font-size="40">💚</text>
+            <text x="100" y="115" text-anchor="middle" font-size="14" fill="#6b7280">微信收款码</text>
+            <text x="100" y="135" text-anchor="middle" font-size="12" fill="#667eea">请替换为真实二维码</text>
+          </svg>
+          <p class="donate-desc">
+            如果你喜欢这些小游戏<br>
+            可以请作者喝杯奶茶 ☕<br>
+            <span style="color:#4ade80;font-weight:600;">扫码微信支付即可</span>
+          </p>
+        </div>
+        <div class="card-panel" style="text-align:center;">
+          <p class="donate-desc" style="font-size:12px;">
+            本项目完全免费开放<br>
+            每一份支持都是对作者最大的鼓励 🎉
+          </p>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end main-content -->
+
+  <!-- Bottom Nav -->
+  <nav class="bottom-nav">
+    <button class="nav-tab active" id="tab-games" onclick="switchTab('games')">
+      <span class="tab-icon">🎮</span>
+      <span>游戏</span>
+    </button>
+    <button class="nav-tab" id="tab-feedback" onclick="switchTab('feedback')">
+      <span class="tab-icon">💬</span>
+      <span>反馈</span>
+    </button>
+    <button class="nav-tab" id="tab-donate" onclick="switchTab('donate')">
+      <span class="tab-icon">❤️</span>
+      <span>支持</span>
+    </button>
+  </nav>
+
+  <!-- 历史记录 Modal -->
+  <div class="modal-mask" id="history-modal" onclick="closeHistory(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <span class="modal-title">📋 游戏历史</span>
+        <button class="modal-close" onclick="closeHistory()">✕</button>
+      </div>
+      <div class="modal-body" id="history-modal-body"></div>
+    </div>
+  </div>
+
+</div><!-- end app-shell -->
+
+<script src="js/storage.js"></script>
+<script>
+  // ===== Game definitions =====
+  const GAMES = [
+    {
+      id: 'game-24',
+      title: '24 点',
+      desc: '用4张牌凑出24，越快越厉害',
+      icon: '🃏',
+      color: '#ede9fe',
+      iconBg: '#7c3aed',
+      file: 'games/24points.html',
+      recordLabel: (r) => r ? `最快 ${r.value}s` : '未挑战',
+      recordStrategy: 'lower',
+    },
+    {
+      id: 'mental-math',
+      title: '心算闯关',
+      desc: '60秒内答对越多道题越好',
+      icon: '⚡',
+      color: '#fef3c7',
+      iconBg: '#d97706',
+      file: 'games/mental-math.html',
+      recordLabel: (r) => r ? `最高 ${r.value} 题` : '未挑战',
+      recordStrategy: 'higher',
+    },
+    {
+      id: 'guess-number',
+      title: '猜数字',
+      desc: '猜出1-100的神秘数字，次数越少越好',
+      icon: '🔢',
+      color: '#dcfce7',
+      iconBg: '#16a34a',
+      file: 'games/guess-number.html',
+      recordLabel: (r) => r ? `最少 ${r.value} 次` : '未挑战',
+      recordStrategy: 'lower',
+    },
+    {
+      id: 'prime-blitz',
+      title: '质数猎人',
+      desc: '30秒快速判断质数，连对加分',
+      icon: '🎯',
+      color: '#fce7f3',
+      iconBg: '#db2777',
+      file: 'games/prime-blitz.html',
+      recordLabel: (r) => r ? `最高 ${r.value} 分` : '未挑战',
+      recordStrategy: 'higher',
+    },
+    {
+      id: 'multiply-flash',
+      title: '乘法闪卡',
+      desc: '限时答乘法表，正确率决定得分',
+      icon: '✖️',
+      color: '#e0f2fe',
+      iconBg: '#0284c7',
+      file: 'games/multiply-flash.html',
+      recordLabel: (r) => r ? `最高 ${r.value} 分` : '未挑战',
+      recordStrategy: 'higher',
+    },
+    // ===== 第二批：数字/逻辑类 =====
+    {
+      id: 'mastermind',
+      title: '数字猜谜',
+      desc: '猜4位不重复数字，位置和数字都要对',
+      icon: '🔐',
+      color: '#fdf2f8',
+      iconBg: '#9333ea',
+      file: 'games/mastermind.html',
+      recordLabel: (r) => r ? `最少 ${r.value} 次` : '未挑战',
+      recordStrategy: 'lower',
+    },
+    {
+      id: 'hanoi',
+      title: '河内塔',
+      desc: '将所有圆盘从左柱移到右柱，小盘不能压大盘',
+      icon: '🗼',
+      color: '#fff7ed',
+      iconBg: '#ea580c',
+      file: 'games/hanoi.html',
+      recordLabel: (r) => r ? `最少 ${r.value} 步` : '未挑战',
+      recordStrategy: 'lower',
+    },
+    {
+      id: 'truth-liar',
+      title: '谁说真话',
+      desc: '根据陈述推理谁是骑士（真话）谁是无赖（假话）',
+      icon: '🕵️',
+      color: '#f0fdf4',
+      iconBg: '#15803d',
+      file: 'games/truth-liar.html',
+      recordLabel: (r) => r ? `最高 ${r.value} 关` : '未挑战',
+      recordStrategy: 'higher',
+    },
+    {
+      id: 'prisoner-dilemma',
+      title: '囚徒困境',
+      desc: '与AI博弈：合作还是背叛？体验博弈论经典',
+      icon: '⚖️',
+      color: '#fef2f2',
+      iconBg: '#dc2626',
+      file: 'games/prisoner-dilemma.html',
+      recordLabel: (r) => r ? `最高 ${r.value} 分` : '未挑战',
+      recordStrategy: 'higher',
+    },
+    {
+      id: 'fifteen-puzzle',
+      title: '数字华容道',
+      desc: '滑动方块，将1-15按顺序排好',
+      icon: '🧩',
+      color: '#eff6ff',
+      iconBg: '#2563eb',
+      file: 'games/fifteen-puzzle.html',
+      recordLabel: (r) => r ? `最少 ${r.value} 步` : '未挑战',
+      recordStrategy: 'lower',
+    },
+    {
+      id: 'magic-square',
+      title: '幻方填数',
+      desc: '填入数字使每行、列、对角线之和相等',
+      icon: '🔮',
+      color: '#f5f3ff',
+      iconBg: '#7c3aed',
+      file: 'games/magic-square.html',
+      recordLabel: (r) => r ? `最快 ${r.value}s` : '未挑战',
+      recordStrategy: 'lower',
+    },
+    {
+      id: 'fill-operator',
+      title: '填运算符',
+      desc: '在数字间填入+-×÷使等式成立',
+      icon: '➕',
+      color: '#ecfdf5',
+      iconBg: '#059669',
+      file: 'games/fill-operator.html',
+      recordLabel: (r) => r ? `最高 ${r.value} 关` : '未挑战',
+      recordStrategy: 'higher',
+    },
+    {
+      id: 'memory-matrix',
+      title: '记忆矩阵',
+      desc: '记住数字矩阵的位置，考验记忆力',
+      icon: '🧠',
+      color: '#fdf4ff',
+      iconBg: '#a21caf',
+      file: 'games/memory-matrix.html',
+      recordLabel: (r) => r ? `最高 ${r.value}×${r.value}` : '未挑战',
+      recordStrategy: 'higher',
+    },
+    // ===== 第三批：速算/估算类 =====
+    {
+      id: 'sequence',
+      title: '找规律',
+      desc: '找出数列规律，填入下一项',
+      icon: '📐',
+      color: '#fefce8',
+      iconBg: '#ca8a04',
+      file: 'games/sequence.html',
+      recordLabel: (r) => r ? `最高 ${r.value} 题` : '未挑战',
+      recordStrategy: 'higher',
+    },
+    {
+      id: 'binary-convert',
+      title: '二进制转换',
+      desc: '60秒快速在十进制和二进制间转换',
+      icon: '💻',
+      color: '#f0fdf4',
+      iconBg: '#16a34a',
+      file: 'games/binary-convert.html',
+      recordLabel: (r) => r ? `最高 ${r.value} 题` : '未挑战',
+      recordStrategy: 'higher',
+    },
+    {
+      id: 'fraction-compare',
+      title: '分数比大小',
+      desc: '30秒内快速判断两个分数哪个更大',
+      icon: '½',
+      color: '#fff1f2',
+      iconBg: '#e11d48',
+      file: 'games/fraction-compare.html',
+      recordLabel: (r) => r ? `最高 ${r.value} 题` : '未挑战',
+      recordStrategy: 'higher',
+    },
+    {
+      id: 'factor-game',
+      title: '因数猎手',
+      desc: '找出给定数的所有因数，考验数论知识',
+      icon: '🌿',
+      color: '#f0fdf4',
+      iconBg: '#15803d',
+      file: 'games/factor-game.html',
+      recordLabel: (r) => r ? `最高 ${r.value} 分` : '未挑战',
+      recordStrategy: 'higher',
+    },
+    {
+      id: 'speed-chain',
+      title: '速算接龙',
+      desc: '前一题的答案是下一题的起点，能接多长？',
+      icon: '⛓️',
+      color: '#fff7ed',
+      iconBg: '#c2410c',
+      file: 'games/speed-chain.html',
+      recordLabel: (r) => r ? `最长 ${r.value} 环` : '未挑战',
+      recordStrategy: 'higher',
+    },
+    {
+      id: 'angle-guess',
+      title: '角度估算',
+      desc: '估算角的度数，越准确得分越高',
+      icon: '📏',
+      color: '#eff6ff',
+      iconBg: '#1d4ed8',
+      file: 'games/angle-guess.html',
+      recordLabel: (r) => r ? `最高 ${r.value} 分` : '未挑战',
+      recordStrategy: 'higher',
+    },
+    {
+      id: 'coordinate-target',
+      title: '坐标射击',
+      desc: '根据坐标，在坐标系中精准点击目标',
+      icon: '🎯',
+      color: '#fefce8',
+      iconBg: '#b45309',
+      file: 'games/coordinate-target.html',
+      recordLabel: (r) => r ? `最高 ${r.value} 分` : '未挑战',
+      recordStrategy: 'higher',
+    },
+    // ===== 第四批：趣味科普类 =====
+    {
+      id: 'monty-hall',
+      title: '蒙提霍尔',
+      desc: '经典概率悖论：换门还是不换门？',
+      icon: '🚪',
+      color: '#fdf2f8',
+      iconBg: '#be185d',
+      file: 'games/monty-hall.html',
+      recordLabel: (r) => r ? `换门胜率 ${r.value}%` : '未挑战',
+      recordStrategy: 'higher',
+    },
+    {
+      id: 'balance-puzzle',
+      title: '天平称假币',
+      desc: '用最少次数的称重找出那枚假币',
+      icon: '⚖️',
+      color: '#f8fafc',
+      iconBg: '#475569',
+      file: 'games/balance-puzzle.html',
+      recordLabel: (r) => r ? `最高 ${r.value} 关` : '未挑战',
+      recordStrategy: 'higher',
+    },
+    {
+      id: 'pi-monte-carlo',
+      title: 'π蒙特卡洛',
+      desc: '用随机投点法估算圆周率π，直观感受概率',
+      icon: 'π',
+      color: '#f0f9ff',
+      iconBg: '#0369a1',
+      file: 'games/pi-monte-carlo.html',
+      recordLabel: (r) => r ? `最高精度 ${r.value}%` : '未挑战',
+      recordStrategy: 'higher',
+    },
+    {
+      id: 'probability-coins',
+      title: '概率直觉',
+      desc: '测测你的概率直觉：连续抛硬币会怎样？',
+      icon: '🪙',
+      color: '#fffbeb',
+      iconBg: '#d97706',
+      file: 'games/probability-coins.html',
+      recordLabel: (r) => r ? `最高 ${r.value} 分` : '未挑战',
+      recordStrategy: 'higher',
+    },
+    {
+      id: 'zeno-paradox',
+      title: '芝诺悖论',
+      desc: '无限步是否能到达终点？感受无穷级数收敛',
+      icon: '∞',
+      color: '#faf5ff',
+      iconBg: '#6d28d9',
+      file: 'games/zeno-paradox.html',
+      recordLabel: (r) => r ? `最高 ${r.value} 关` : '未挑战',
+      recordStrategy: 'higher',
+    },
+  ];
+
+  // ===== Render game cards =====
+  function renderGames() {
+    const grid = document.getElementById('games-grid');
+    grid.innerHTML = GAMES.map(g => {
+      const rec = Storage.getRecord(g.id);
+      return `
+        <a class="game-card" href="${g.file}">
+          <div class="game-card-icon" style="background:${g.color};">
+            <span style="font-size:28px;">${g.icon}</span>
+          </div>
+          <div class="game-card-body">
+            <div class="game-card-title">${g.title}</div>
+            <div class="game-card-desc">${g.desc}</div>
+            <div class="game-card-record">🏆 ${g.recordLabel(rec)}</div>
+          </div>
+          <span style="color:#d1d5db;font-size:20px;">›</span>
+        </a>`;
+    }).join('');
+  }
+
+  // ===== Tab switching =====
+  function switchTab(name) {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('panel-' + name).classList.add('active');
+    document.getElementById('tab-' + name).classList.add('active');
+    if (name === 'games') renderGames();
+    if (name === 'feedback') renderFeedback();
+  }
+
+  // ===== Feedback =====
+  function renderFeedback() {
+    const list = Storage.getFeedback();
+    const el = document.getElementById('feedback-list');
+    if (!list.length) {
+      el.innerHTML = '<div class="feedback-empty">还没有建议，快来提交第一条吧！</div>';
+      return;
+    }
+    el.innerHTML = list.map(fb => `
+      <div class="feedback-item">
+        <div class="fb-text">${escapeHtml(fb.text)}</div>
+        <div class="fb-date">${fb.date}</div>
+      </div>`).join('');
+  }
+
+  function submitFeedback() {
+    const input = document.getElementById('feedback-input');
+    const text = input.value.trim();
+    if (!text) { showToast('请输入建议内容'); return; }
+    Storage.saveFeedback(text);
+    input.value = '';
+    renderFeedback();
+    showToast('感谢你的建议！💬');
+  }
+
+  // ===== Toast =====
+  function showToast(msg, duration = 2200) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), duration);
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ===== View Toggle =====
+  let currentView = localStorage.getItem('mathgames_view') || 'list';
+
+  function setView(view) {
+    currentView = view;
+    localStorage.setItem('mathgames_view', view);
+    const grid = document.getElementById('games-grid');
+    if (view === 'icon') {
+      grid.classList.add('icon-view');
+    } else {
+      grid.classList.remove('icon-view');
+    }
+    document.getElementById('btn-list-view').classList.toggle('active', view === 'list');
+    document.getElementById('btn-icon-view').classList.toggle('active', view === 'icon');
+  }
+
+  // ===== History Modal =====
+  function openHistory() {
+    const body = document.getElementById('history-modal-body');
+    const played = GAMES.filter(g => Storage.getRecord(g.id));
+    if (!played.length) {
+      body.innerHTML = '<div class="modal-empty">还没有游戏记录，快去挑战吧！🎮</div>';
+    } else {
+      body.innerHTML = played.map(g => {
+        const rec = Storage.getRecord(g.id);
+        return `
+          <div class="hist-game-row">
+            <div class="hist-game-icon" style="background:${g.color};">${g.icon}</div>
+            <div class="hist-game-info">
+              <div class="hist-game-title">${g.title}</div>
+              <div class="hist-game-record">🏆 ${g.recordLabel(rec)}</div>
+              <div class="hist-game-date">${rec.date}</div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+    document.getElementById('history-modal').classList.add('open');
+  }
+
+  function closeHistory(e) {
+    if (e && e.target !== document.getElementById('history-modal')) return;
+    document.getElementById('history-modal').classList.remove('open');
+  }
+
+  // ===== Init =====
+  renderGames();
+  setView(currentView);
+</script>
+</body>
+</html>

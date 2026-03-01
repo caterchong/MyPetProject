@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>质数猎人 — 数学趣味游戏</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .verdict-flash {
+      font-size: 22px;
+      font-weight: 800;
+      text-align: center;
+      height: 32px;
+      line-height: 32px;
+    }
+    .verdict-flash.correct { color: var(--success); }
+    .verdict-flash.wrong   { color: var(--danger);  }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="toast" id="toast"></div>
+
+  <div class="game-header">
+    <a class="btn-back" href="../index.html">← 返回</a>
+    <span class="game-header-title">🎯 质数猎人</span>
+    <span class="score-badge" id="score-badge">0 分</span>
+  </div>
+
+  <div class="main-content">
+    <div class="game-area">
+
+      <!-- 介绍 -->
+      <div class="game-intro-card" id="intro-card">
+        <h2>🎯 质数猎人</h2>
+        <p>
+          30秒内，迅速判断每个数字是否是<strong>质数</strong>。<br><br>
+          答对 +1 分，答错 -1 分，连对3次 ×2 加分！<br><br>
+          质数：只能被 1 和自身整除的整数，如 2, 3, 5, 7, 11…
+        </p>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="openHistory()">📋 历史记录</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="startGame()">开始猎质数！</button>
+        </div>
+      </div>
+
+      <!-- 游戏区 -->
+      <div class="game-play-card hidden" id="play-card">
+        <div class="stats-row" style="margin-bottom:8px;">
+          <div class="stat-box">
+            <div class="stat-val" id="time-left" style="color:var(--danger);">30</div>
+            <div class="stat-label">剩余秒</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" id="score-val">0</div>
+            <div class="stat-label">得分</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" id="streak-val">0</div>
+            <div class="stat-label">连对</div>
+          </div>
+        </div>
+
+        <div class="timer-bar-wrap">
+          <div class="timer-bar" id="timer-bar" style="width:100%;"></div>
+        </div>
+
+        <div class="number-display" id="number-display">?</div>
+        <div class="verdict-flash" id="verdict-flash">&nbsp;</div>
+
+        <div class="answer-row">
+          <button class="btn btn-success" onclick="answer(true)">✓ 是质数</button>
+          <button class="btn btn-danger"  onclick="answer(false)">✗ 不是</button>
+        </div>
+
+        <div style="margin-top:12px;text-align:center;" id="combo-area"></div>
+      </div>
+
+      <!-- 结果 -->
+      <div class="game-result-card hidden" id="result-card">
+        <div class="result-title">🎯 时间到！</div>
+        <div class="result-score" id="result-score">0</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:4px;">分</div>
+        <div class="result-record hidden" id="result-record">🏆 新纪录！</div>
+        <div class="stats-row" style="margin-bottom:16px;">
+          <div class="stat-box">
+            <div class="stat-val" id="res-correct" style="color:var(--success);">0</div>
+            <div class="stat-label">答对</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" id="res-wrong" style="color:var(--danger);">0</div>
+            <div class="stat-label">答错</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" id="res-max-streak">0</div>
+            <div class="stat-label">最长连对</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="startGame()">再来一局</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="window.location.href='../index.html'">返回大厅</button>
+        </div>
+        <div class="mt16" id="history-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 历史记录 Modal -->
+  <div class="modal-mask" id="history-modal" onclick="closeHistory(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <span class="modal-title">📋 历史记录</span>
+        <button class="modal-close" onclick="closeHistory()">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="../js/storage.js"></script>
+<script>
+  const GAME_ID = 'prime-blitz';
+  const TOTAL_TIME = 30;
+
+  let score = 0, streak = 0, maxStreak = 0;
+  let correctCount = 0, wrongCount = 0;
+  let timeLeft = TOTAL_TIME;
+  let timerInterval = null;
+  let currentNum = 0;
+  let answered = false;
+
+  function isPrime(n) {
+    if (n < 2) return false;
+    if (n === 2) return true;
+    if (n % 2 === 0) return false;
+    for (let i = 3; i * i <= n; i += 2) {
+      if (n % i === 0) return false;
+    }
+    return true;
+  }
+
+  function nextNumber() {
+    // Mix: 40% prime, 60% composite, range 2-97
+    let n;
+    if (Math.random() < 0.4) {
+      const primes = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97];
+      n = primes[Math.floor(Math.random()*primes.length)];
+    } else {
+      do { n = Math.floor(Math.random()*96) + 2; } while (isPrime(n));
+    }
+    currentNum = n;
+    answered = false;
+    const el = document.getElementById('number-display');
+    el.textContent = n;
+    el.classList.add('pop');
+    setTimeout(() => el.classList.remove('pop'), 300);
+  }
+
+  function startGame() {
+    score = 0; streak = 0; maxStreak = 0; correctCount = 0; wrongCount = 0;
+    timeLeft = TOTAL_TIME;
+    clearInterval(timerInterval);
+
+    ['score-val','streak-val'].forEach(id => document.getElementById(id).textContent = '0');
+    document.getElementById('time-left').textContent = TOTAL_TIME;
+    document.getElementById('timer-bar').style.width = '100%';
+    document.getElementById('verdict-flash').innerHTML = '&nbsp;';
+    document.getElementById('combo-area').innerHTML = '';
+    document.getElementById('score-badge').textContent = '0 分';
+
+    document.getElementById('intro-card').classList.add('hidden');
+    document.getElementById('result-card').classList.add('hidden');
+    document.getElementById('play-card').classList.remove('hidden');
+
+    nextNumber();
+
+    timerInterval = setInterval(() => {
+      timeLeft--;
+      document.getElementById('time-left').textContent = timeLeft;
+      document.getElementById('timer-bar').style.width = (timeLeft / TOTAL_TIME * 100) + '%';
+      if (timeLeft <= 0) {
+        clearInterval(timerInterval);
+        endGame();
+      }
+    }, 1000);
+  }
+
+  function answer(userSaysPrime) {
+    if (answered || timeLeft <= 0) return;
+    answered = true;
+
+    const correct = isPrime(currentNum) === userSaysPrime;
+    const flash = document.getElementById('verdict-flash');
+
+    if (correct) {
+      correctCount++;
+      streak++;
+      if (streak > maxStreak) maxStreak = streak;
+
+      let gain = 1;
+      if (streak >= 3) gain = 2;
+      if (streak >= 6) gain = 3;
+      score += gain;
+
+      flash.textContent = `✓ 正确！${gain > 1 ? ' x'+gain+' 连击！' : ''}`;
+      flash.className = 'verdict-flash correct';
+    } else {
+      wrongCount++;
+      streak = 0;
+      score = Math.max(0, score - 1);
+      const truth = isPrime(currentNum) ? '是质数' : '不是质数';
+      flash.textContent = `✗ 错了，${currentNum} ${truth}`;
+      flash.className = 'verdict-flash wrong';
+    }
+
+    document.getElementById('score-val').textContent = score;
+    document.getElementById('streak-val').textContent = streak;
+    document.getElementById('score-badge').textContent = score + ' 分';
+
+    // Combo display
+    const combo = document.getElementById('combo-area');
+    if (streak >= 3) {
+      combo.innerHTML = `<span class="streak-badge">🔥 连对 ${streak} 次！</span>`;
+    } else {
+      combo.innerHTML = '';
+    }
+
+    setTimeout(() => {
+      flash.innerHTML = '&nbsp;';
+      flash.className = 'verdict-flash';
+      if (timeLeft > 0) nextNumber();
+    }, 600);
+  }
+
+  function endGame() {
+    document.getElementById('play-card').classList.add('hidden');
+    document.getElementById('result-card').classList.remove('hidden');
+
+    document.getElementById('result-score').textContent = score;
+    document.getElementById('res-correct').textContent = correctCount;
+    document.getElementById('res-wrong').textContent = wrongCount;
+    document.getElementById('res-max-streak').textContent = maxStreak;
+
+    const isRecord = Storage.saveRecord(GAME_ID, { value: score, label: `${score}分` }, 'higher');
+    const recEl = document.getElementById('result-record');
+    if (isRecord) recEl.classList.remove('hidden'); else recEl.classList.add('hidden');
+
+    const history = Storage.getHistory(GAME_ID);
+    const listEl = document.getElementById('history-list');
+    if (history.length) {
+      listEl.innerHTML = '<div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted);">历史记录</div>' +
+        history.slice(0,5).map(h => `
+          <div style="background:var(--bg);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;font-size:13px;">
+            <span>${h.label}</span>
+            <span style="color:var(--muted)">${h.date}</span>
+          </div>`).join('');
+    }
+  }
+
+  // ===== History Modal =====
+  const MEDALS = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  function openHistory() {
+    const history = Storage.getHistory(GAME_ID);
+    const best = Storage.getRecord(GAME_ID);
+    const body = document.getElementById('modal-body');
+    if (!history.length) {
+      body.innerHTML = '<div class="modal-empty">还没有记录，快去挑战吧！🎮</div>';
+    } else {
+      const bestHtml = best
+        ? `<div style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:14px;font-weight:700;">🏆 最佳纪录</span>
+            <span style="font-size:20px;font-weight:800;">${best.label}</span>
+           </div>` : '';
+      const rows = history.map((h, i) => `
+        <div class="history-row">
+          <span class="h-rank">${MEDALS[i] || (i+1+'.')}</span>
+          <span class="h-val">${h.label}</span>
+          <span class="h-date">${h.date}</span>
+        </div>`).join('');
+      body.innerHTML = bestHtml + rows;
+    }
+    document.getElementById('history-modal').classList.add('open');
+  }
+  function closeHistory(e) {
+    if (e && e.target !== document.getElementById('history-modal')) return;
+    document.getElementById('history-modal').classList.remove('open');
+  }
+</script>
+</body>
+</html>

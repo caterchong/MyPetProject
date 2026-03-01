@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>24点 — 数学趣味游戏</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .cards-area { margin: 8px 0; }
+    .ops-row {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin: 4px 0;
+    }
+    .op-btn {
+      width: 52px;
+      height: 52px;
+      border-radius: 12px;
+      border: 2px solid var(--primary);
+      background: #fff;
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--primary);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .op-btn:active, .op-btn.selected {
+      background: var(--primary);
+      color: #fff;
+    }
+    .expr-display {
+      background: var(--bg);
+      border-radius: 14px;
+      padding: 14px 18px;
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--primary-dark);
+      min-height: 54px;
+      text-align: center;
+      letter-spacing: 2px;
+      word-break: break-all;
+    }
+    .hint-text {
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+    }
+    .history-list { margin-top: 4px; }
+    .history-item {
+      background: var(--bg);
+      border-radius: 10px;
+      padding: 8px 12px;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="toast" id="toast"></div>
+
+  <div class="game-header">
+    <a class="btn-back" href="../index.html">← 返回</a>
+    <span class="game-header-title">🃏 24点</span>
+    <span class="score-badge" id="score-badge">⏱ 0s</span>
+  </div>
+
+  <div class="main-content">
+    <div class="game-area">
+
+      <!-- 介绍 -->
+      <div class="game-intro-card" id="intro-card">
+        <h2>🃏 24点</h2>
+        <p>
+          系统发给你 <strong>4张牌</strong>（1-13），<br>
+          用 <strong>+ - × ÷</strong> 和括号，让结果等于 <strong>24</strong>。<br><br>
+          点击牌和运算符，逐步构建算式，越快越好！<br><br>
+          <strong>牌面数值：</strong><br>
+          A = 1　J = 11　Q = 12　K = 13
+        </p>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="openHistory()">📋 历史记录</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="startGame()">开始游戏</button>
+        </div>
+      </div>
+
+      <!-- 游戏区 -->
+      <div class="game-play-card hidden" id="play-card">
+        <div class="stats-row" style="margin-bottom:12px;">
+          <div class="stat-box">
+            <div class="stat-val" id="timer-val">0</div>
+            <div class="stat-label">用时(秒)</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" id="round-val">1</div>
+            <div class="stat-label">当前局</div>
+          </div>
+        </div>
+
+        <div class="cards-area">
+          <p class="hint-text" style="margin-bottom:4px;">点击选牌，再选运算符</p>
+          <p class="hint-text" style="margin-bottom:8px;">A=1　J=11　Q=12　K=13</p>
+          <div class="cards-row" id="cards-row"></div>
+        </div>
+
+        <div class="ops-row">
+          <button class="op-btn" onclick="selectOp('+')">+</button>
+          <button class="op-btn" onclick="selectOp('-')">−</button>
+          <button class="op-btn" onclick="selectOp('×')">×</button>
+          <button class="op-btn" onclick="selectOp('÷')">÷</button>
+        </div>
+
+        <div class="expr-display" id="expr-display">—</div>
+        <p class="hint-text mt8">结果 = <span id="eval-result">?</span></p>
+
+        <div style="display:flex;gap:8px;margin-top:12px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="undoStep()">↩ 撤销</button>
+          <button class="btn btn-outline" style="flex:1;" onclick="resetCards()">🔄 重置</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="checkAnswer()">✓ 提交</button>
+        </div>
+        <button class="btn btn-outline mt8" onclick="skipRound()" style="font-size:13px;padding:10px;">无解 / 换一题</button>
+      </div>
+
+      <!-- 结果 -->
+      <div class="game-result-card hidden" id="result-card">
+        <div class="result-title" id="result-title">🎉 完成！</div>
+        <div class="result-score" id="result-score">0s</div>
+        <div class="result-record hidden" id="result-record">🏆 新纪录！</div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="startGame()">再来一局</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="window.location.href='../index.html'">返回大厅</button>
+        </div>
+        <div class="history-list mt16" id="history-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 历史记录 Modal -->
+  <div class="modal-mask" id="history-modal" onclick="closeHistory(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <span class="modal-title">📋 历史记录</span>
+        <button class="modal-close" onclick="closeHistory()">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="../js/storage.js"></script>
+<script>
+  const GAME_ID = 'game-24';
+  const CARD_NAMES = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  const CARD_VALUES = [1,2,3,4,5,6,7,8,9,10,11,12,13];
+
+  let cards = [];       // {val, name, id, used}
+  let steps = [];       // built expression pieces
+  let selectedCard = null;
+  let selectedOp = null;
+  let timerInterval = null;
+  let elapsed = 0;
+  let round = 0;
+
+  function startGame() {
+    round++;
+    elapsed = 0;
+    steps = [];
+    selectedCard = null;
+    selectedOp = null;
+    clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+      elapsed++;
+      document.getElementById('timer-val').textContent = elapsed;
+      document.getElementById('score-badge').textContent = `⏱ ${elapsed}s`;
+    }, 1000);
+
+    // Generate solvable hand
+    cards = generateSolvable();
+    document.getElementById('round-val').textContent = round;
+    renderCards();
+    updateExpr();
+
+    document.getElementById('intro-card').classList.add('hidden');
+    document.getElementById('result-card').classList.add('hidden');
+    document.getElementById('play-card').classList.remove('hidden');
+  }
+
+  function generateSolvable() {
+    // Try random cards until a solvable set is found
+    for (let attempt = 0; attempt < 500; attempt++) {
+      const vals = [1,2,3,4].map(() => Math.floor(Math.random()*13)+1);
+      if (canMake24(vals)) {
+        return vals.map((v, i) => ({ val: v, name: CARD_NAMES[v-1], id: i, used: false }));
+      }
+    }
+    // Fallback to known solvable set
+    return [3,8,8,3].map((v,i) => ({ val:v, name:CARD_NAMES[v-1], id:i, used:false }));
+  }
+
+  // Check if 4 numbers can make 24 (brute-force all permutations & operator combos)
+  function canMake24(nums) {
+    const ops = ['+','-','*','/'];
+    const perms = permutations(nums);
+    for (const p of perms) {
+      for (const o1 of ops) for (const o2 of ops) for (const o3 of ops) {
+        const exprs = [
+          `((${p[0]}${o1}${p[1]})${o2}${p[2]})${o3}${p[3]}`,
+          `(${p[0]}${o1}(${p[1]}${o2}${p[2]}))${o3}${p[3]}`,
+          `(${p[0]}${o1}${p[1]})${o2}(${p[2]}${o3}${p[3]})`,
+          `${p[0]}${o1}((${p[1]}${o2}${p[2]})${o3}${p[3]})`,
+          `${p[0]}${o1}(${p[1]}${o2}(${p[2]}${o3}${p[3]}))`,
+        ];
+        for (const e of exprs) {
+          try {
+            if (Math.abs(eval(e) - 24) < 1e-9) return true;
+          } catch {}
+        }
+      }
+    }
+    return false;
+  }
+
+  function permutations(arr) {
+    if (arr.length <= 1) return [arr];
+    const result = [];
+    for (let i = 0; i < arr.length; i++) {
+      const rest = [...arr.slice(0,i), ...arr.slice(i+1)];
+      permutations(rest).forEach(p => result.push([arr[i], ...p]));
+    }
+    return result;
+  }
+
+  function renderCards() {
+    const row = document.getElementById('cards-row');
+    row.innerHTML = cards.map(c => `
+      <div class="playing-card ${c.used ? 'hidden' : ''} ${selectedCard && selectedCard.id === c.id ? 'selected' : ''}"
+           id="card-${c.id}" onclick="selectCard(${c.id})">${c.name}</div>
+    `).join('');
+  }
+
+  function selectCard(id) {
+    const card = cards.find(c => c.id === id);
+    if (!card || card.used) return;
+
+    if (steps.length === 0) {
+      // First number in expression
+      selectedCard = card;
+      steps = [{ type: 'num', val: card.val, name: card.name, cardId: card.id }];
+      card.used = true;
+    } else if (selectedOp) {
+      // Second number after an operator
+      steps.push({ type: 'num', val: card.val, name: card.name, cardId: card.id });
+      card.used = true;
+      selectedCard = null;
+      selectedOp = null;
+      clearOpButtons();
+    } else {
+      // Replace selection if no op chosen yet
+      // Un-use previous card if it was just added
+      if (selectedCard) {
+        const prev = cards.find(c => c.id === selectedCard.id);
+        if (prev) { prev.used = false; steps.pop(); }
+      }
+      selectedCard = card;
+      steps.push({ type: 'num', val: card.val, name: card.name, cardId: card.id });
+      card.used = true;
+    }
+    renderCards();
+    updateExpr();
+  }
+
+  function selectOp(op) {
+    if (steps.length === 0 || steps[steps.length-1].type === 'op') return;
+    selectedOp = op;
+    steps.push({ type: 'op', op });
+    clearOpButtons();
+    document.querySelectorAll('.op-btn').forEach(b => {
+      if (b.textContent.trim() === op || (op === '×' && b.textContent.trim() === '×') || (op === '÷' && b.textContent.trim() === '÷')) {
+        b.classList.add('selected');
+      }
+    });
+    updateExpr();
+  }
+
+  function clearOpButtons() {
+    document.querySelectorAll('.op-btn').forEach(b => b.classList.remove('selected'));
+  }
+
+  function buildExprString() {
+    return steps.map(s => s.type === 'num' ? s.name : s.op).join(' ');
+  }
+
+  function evalExpr() {
+    // Convert names to values and operators
+    const evalStr = steps.map(s => {
+      if (s.type === 'num') return s.val;
+      if (s.op === '×') return '*';
+      if (s.op === '÷') return '/';
+      return s.op;
+    }).join('');
+    if (!/^[\d\+\-\*\/\.]+$/.test(evalStr)) return NaN;
+    try { return eval(evalStr); } catch { return NaN; }
+  }
+
+  function updateExpr() {
+    const exprStr = buildExprString() || '—';
+    document.getElementById('expr-display').textContent = exprStr;
+    const val = evalExpr();
+    if (isNaN(val)) {
+      document.getElementById('eval-result').textContent = '?';
+    } else {
+      document.getElementById('eval-result').textContent = Number.isInteger(val) ? val : val.toFixed(2);
+    }
+  }
+
+  function undoStep() {
+    if (steps.length === 0) return;
+    const last = steps.pop();
+    if (last.type === 'num') {
+      const c = cards.find(c => c.id === last.cardId);
+      if (c) c.used = false;
+      selectedCard = null;
+    } else {
+      selectedOp = null;
+      clearOpButtons();
+    }
+    renderCards();
+    updateExpr();
+  }
+
+  function resetCards() {
+    steps = [];
+    selectedCard = null;
+    selectedOp = null;
+    clearOpButtons();
+    cards.forEach(c => c.used = false);
+    renderCards();
+    updateExpr();
+  }
+
+  function checkAnswer() {
+    const usedCount = cards.filter(c => c.used).length;
+    if (usedCount < 4) { showToast('需要用上全部4张牌！'); return; }
+    if (steps[steps.length-1]?.type === 'op') { showToast('算式未完成！'); return; }
+
+    const val = evalExpr();
+    if (Math.abs(val - 24) < 1e-9) {
+      clearInterval(timerInterval);
+      const isRecord = Storage.saveRecord(GAME_ID, { value: elapsed, label: `${elapsed}s` }, 'lower');
+      showResult(true, isRecord);
+    } else {
+      const el = document.getElementById('expr-display');
+      el.classList.add('shake');
+      setTimeout(() => el.classList.remove('shake'), 400);
+      showToast(`结果是 ${Number.isInteger(val)?val:val.toFixed(2)}，不是 24，再试试！`);
+    }
+  }
+
+  function skipRound() {
+    startGame();
+  }
+
+  function showResult(success, isRecord) {
+    document.getElementById('play-card').classList.add('hidden');
+    document.getElementById('result-card').classList.remove('hidden');
+    document.getElementById('result-title').textContent = success ? '🎉 答对啦！' : '😅 换一题';
+    document.getElementById('result-score').textContent = `${elapsed} 秒`;
+
+    const recEl = document.getElementById('result-record');
+    if (isRecord && success) {
+      recEl.classList.remove('hidden');
+    } else {
+      recEl.classList.add('hidden');
+    }
+
+    const history = Storage.getHistory(GAME_ID);
+    const listEl = document.getElementById('history-list');
+    if (history.length) {
+      listEl.innerHTML = '<div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted);">历史记录</div>' +
+        history.slice(0,5).map(h => `
+          <div class="history-item">
+            <span>${h.label}</span>
+            <span style="color:var(--muted)">${h.date}</span>
+          </div>`).join('');
+    }
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  // ===== History Modal =====
+  const MEDALS = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  function openHistory() {
+    const history = Storage.getHistory(GAME_ID);
+    const best = Storage.getRecord(GAME_ID);
+    const body = document.getElementById('modal-body');
+    if (!history.length) {
+      body.innerHTML = '<div class="modal-empty">还没有记录，快去挑战吧！🎮</div>';
+    } else {
+      const bestHtml = best
+        ? `<div style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:14px;font-weight:700;">🏆 最佳纪录</span>
+            <span style="font-size:20px;font-weight:800;">${best.label}</span>
+           </div>` : '';
+      const rows = history.map((h, i) => `
+        <div class="history-row">
+          <span class="h-rank">${MEDALS[i] || (i+1+'.')}</span>
+          <span class="h-val">${h.label}</span>
+          <span class="h-date">${h.date}</span>
+        </div>`).join('');
+      body.innerHTML = bestHtml + rows;
+    }
+    document.getElementById('history-modal').classList.add('open');
+  }
+  function closeHistory(e) {
+    if (e && e.target !== document.getElementById('history-modal')) return;
+    document.getElementById('history-modal').classList.remove('open');
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>囚徒困境 — 数学趣味游戏</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .payoff-table { width:100%; border-collapse:collapse; margin:8px 0; font-size:13px; }
+    .payoff-table th, .payoff-table td { padding:8px; text-align:center; border:1px solid #e5e7eb; }
+    .payoff-table th { background:var(--bg); font-weight:700; }
+    .round-row {
+      display:flex; justify-content:space-between; align-items:center;
+      padding:8px 12px; border-radius:10px; margin-bottom:6px; font-size:13px;
+    }
+    .round-row.coop-coop { background:#dcfce7; }
+    .round-row.coop-defect { background:#fef2f2; }
+    .round-row.defect-coop { background:#fff7ed; }
+    .round-row.defect-defect { background:#f1f5f9; }
+    .choice-btn { flex:1; padding:20px 12px; border-radius:16px; border:3px solid transparent;
+      font-size:18px; font-weight:700; cursor:pointer; transition:all .2s; text-align:center;
+    }
+    .choice-btn.cooperate { background:#dcfce7; border-color:var(--success); color:#15803d; }
+    .choice-btn.defect    { background:#fef2f2; border-color:var(--danger);  color:#dc2626; }
+    .choice-btn:hover { transform:scale(1.03); }
+    .score-compare {
+      display:flex; gap:8px; margin:8px 0;
+    }
+    .score-box { flex:1; background:var(--bg); border-radius:12px; padding:12px; text-align:center; }
+    .score-box .sb-val { font-size:26px; font-weight:800; color:var(--primary); }
+    .score-box .sb-label { font-size:11px; color:var(--muted); }
+    .ai-strategy-label { font-size:12px; color:var(--muted); text-align:center; }
+    .reveal-area { min-height:44px; display:flex; align-items:center; justify-content:center;
+      font-size:16px; font-weight:700; border-radius:12px; padding:10px; margin:8px 0; }
+    .reveal-area.cc { background:#dcfce7; color:#15803d; }
+    .reveal-area.cd { background:#fef2f2; color:#dc2626; }
+    .reveal-area.dc { background:#fff7ed; color:#c2410c; }
+    .reveal-area.dd { background:#f1f5f9; color:#475569; }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="toast" id="toast"></div>
+  <div class="game-header">
+    <a class="btn-back" href="../index.html">← 返回</a>
+    <span class="game-header-title">⚖️ 囚徒困境</span>
+    <span class="score-badge" id="score-badge">0 分</span>
+  </div>
+  <div class="main-content">
+    <div class="game-area">
+
+      <div class="game-intro-card" id="intro-card">
+        <h2>⚖️ 囚徒困境</h2>
+        <p>你和AI进行 <strong>20轮</strong> 博弈，每轮同时选择：</p>
+        <table class="payoff-table">
+          <tr><th></th><th>AI合作</th><th>AI背叛</th></tr>
+          <tr><th>你合作</th><td>双方各+3</td><td>你+0，AI+5</td></tr>
+          <tr><th>你背叛</th><td>你+5，AI+0</td><td>双方各+1</td></tr>
+        </table>
+        <p style="margin-top:8px;">AI策略：<strong>以牙还牙</strong>（TFT）——上轮你怎么做，它就怎么做。<br>目标：在20轮内尽量得高分！</p>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="openHistory()">📋 历史记录</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="startGame()">开始博弈</button>
+        </div>
+      </div>
+
+      <div class="game-play-card hidden" id="play-card">
+        <div class="score-compare">
+          <div class="score-box">
+            <div class="sb-val" id="my-score">0</div>
+            <div class="sb-label">你的分数</div>
+          </div>
+          <div class="score-box" style="background:#f1f5f9;">
+            <div class="sb-val" id="ai-score" style="color:var(--danger);">0</div>
+            <div class="sb-label">AI分数</div>
+          </div>
+          <div class="score-box">
+            <div class="sb-val" id="round-num">1</div>
+            <div class="sb-label">轮次/20</div>
+          </div>
+        </div>
+        <div class="reveal-area" id="reveal-area">选择你的行动</div>
+        <div style="display:flex;gap:10px;">
+          <button class="choice-btn cooperate" onclick="choose('cooperate')">🤝 合作</button>
+          <button class="choice-btn defect"    onclick="choose('defect')">🔪 背叛</button>
+        </div>
+        <div class="ai-strategy-label mt8">AI策略：以牙还牙（TFT）</div>
+        <div style="margin-top:12px;" id="round-history"></div>
+      </div>
+
+      <div class="game-result-card hidden" id="result-card">
+        <div class="result-title" id="result-title">🏁 博弈结束！</div>
+        <div class="result-score" id="result-score">0</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:4px;">分</div>
+        <div class="result-record hidden" id="result-record">🏆 新纪录！</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:12px;" id="result-comment"></div>
+        <div class="score-compare" style="margin-bottom:16px;">
+          <div class="score-box">
+            <div class="sb-val" id="final-my">0</div>
+            <div class="sb-label">你的总分</div>
+          </div>
+          <div class="score-box" style="background:#f1f5f9;">
+            <div class="sb-val" id="final-ai" style="color:var(--danger);">0</div>
+            <div class="sb-label">AI总分</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="startGame()">再来一局</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="window.location.href='../index.html'">返回大厅</button>
+        </div>
+        <div class="mt16" id="history-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="modal-mask" id="history-modal" onclick="closeHistory(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <span class="modal-title">📋 历史记录</span>
+        <button class="modal-close" onclick="closeHistory()">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+</div>
+<script src="../js/storage.js"></script>
+<script>
+  const GAME_ID = 'prisoner-dilemma';
+  const TOTAL_ROUNDS = 20;
+  let myScore = 0, aiScore = 0, round = 0;
+  let lastMyChoice = 'cooperate'; // TFT: AI copies last move
+  let history = [];
+  let waiting = true;
+
+  const PAYOFF = {
+    'cooperate-cooperate': [3, 3],
+    'cooperate-defect':    [0, 5],
+    'defect-cooperate':    [5, 0],
+    'defect-defect':       [1, 1],
+  };
+
+  function startGame() {
+    myScore = 0; aiScore = 0; round = 0; history = [];
+    lastMyChoice = 'cooperate'; waiting = true;
+    document.getElementById('my-score').textContent = '0';
+    document.getElementById('ai-score').textContent = '0';
+    document.getElementById('round-num').textContent = '1';
+    document.getElementById('round-history').innerHTML = '';
+    document.getElementById('reveal-area').className = 'reveal-area';
+    document.getElementById('reveal-area').textContent = '选择你的行动';
+    document.getElementById('score-badge').textContent = '0 分';
+    document.getElementById('intro-card').classList.add('hidden');
+    document.getElementById('result-card').classList.add('hidden');
+    document.getElementById('play-card').classList.remove('hidden');
+    enableButtons(true);
+  }
+
+  function enableButtons(on) {
+    document.querySelectorAll('.choice-btn').forEach(b => b.style.opacity = on ? '1' : '0.5');
+    document.querySelectorAll('.choice-btn').forEach(b => b.style.pointerEvents = on ? '' : 'none');
+  }
+
+  function choose(myChoice) {
+    if (!waiting) return;
+    waiting = false;
+    enableButtons(false);
+    round++;
+
+    // TFT: first round AI cooperates, then copies last
+    const aiChoice = round === 1 ? 'cooperate' : lastMyChoice;
+    lastMyChoice = myChoice;
+
+    const key = `${myChoice}-${aiChoice}`;
+    const [myPts, aiPts] = PAYOFF[key];
+    myScore += myPts; aiScore += aiPts;
+
+    const revealEl = document.getElementById('reveal-area');
+    const classMap = {'cooperate-cooperate':'cc','cooperate-defect':'cd','defect-cooperate':'dc','defect-defect':'dd'};
+    revealEl.className = 'reveal-area ' + classMap[key];
+    revealEl.textContent = `你${myChoice==='cooperate'?'合作':'背叛'} / AI${aiChoice==='cooperate'?'合作':'背叛'} → 你+${myPts}，AI+${aiPts}`;
+
+    document.getElementById('my-score').textContent = myScore;
+    document.getElementById('ai-score').textContent = aiScore;
+    document.getElementById('round-num').textContent = round < TOTAL_ROUNDS ? round+1 : round;
+    document.getElementById('score-badge').textContent = myScore + ' 分';
+    history.push({ myChoice, aiChoice, myPts, aiPts });
+    addRoundRow(round, myChoice, aiChoice, myPts, aiPts);
+
+    if (round >= TOTAL_ROUNDS) {
+      setTimeout(endGame, 1200);
+    } else {
+      setTimeout(() => { waiting = true; enableButtons(true); }, 900);
+    }
+  }
+
+  function addRoundRow(r, mc, ac, mp, ap) {
+    const hist = document.getElementById('round-history');
+    const key = `${mc}-${ac}`;
+    const cls = {'cooperate-cooperate':'coop-coop','cooperate-defect':'coop-defect','defect-cooperate':'defect-coop','defect-defect':'defect-defect'}[key];
+    const row = document.createElement('div');
+    row.className = 'round-row ' + cls;
+    row.innerHTML = `<span>第${r}轮</span><span>你${mc==='cooperate'?'🤝':'🔪'} AI${ac==='cooperate'?'🤝':'🔪'}</span><span>+${mp} / +${ap}</span>`;
+    hist.prepend(row);
+  }
+
+  function endGame() {
+    document.getElementById('play-card').classList.add('hidden');
+    document.getElementById('result-card').classList.remove('hidden');
+    document.getElementById('final-my').textContent = myScore;
+    document.getElementById('final-ai').textContent = aiScore;
+    document.getElementById('result-score').textContent = myScore;
+    const coops = history.filter(h => h.myChoice === 'cooperate').length;
+    let comment = '';
+    if (myScore >= 55) comment = '太棒了！持续合作是最优策略 🌟';
+    else if (myScore > aiScore) comment = `你赢了AI！合作次数：${coops}/20`;
+    else if (myScore === aiScore) comment = `平局！合作是双赢的智慧 🤝`;
+    else comment = `AI赢了！试试更多合作，TFT策略很强大`;
+    document.getElementById('result-comment').textContent = comment;
+    document.getElementById('result-title').textContent = myScore >= aiScore ? '🏆 你赢了！' : '🤖 AI获胜';
+    const isRecord = Storage.saveRecord(GAME_ID, { value: myScore, label: `${myScore}分` }, 'higher');
+    if (isRecord) document.getElementById('result-record').classList.remove('hidden');
+    const hist = Storage.getHistory(GAME_ID);
+    if (hist.length) {
+      document.getElementById('history-list').innerHTML =
+        '<div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted);">历史记录</div>' +
+        hist.slice(0,5).map(h=>`<div style="background:var(--bg);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;font-size:13px;"><span>${h.label}</span><span style="color:var(--muted)">${h.date}</span></div>`).join('');
+    }
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2000);
+  }
+
+  const MEDALS = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  function openHistory() {
+    const history = Storage.getHistory(GAME_ID);
+    const best = Storage.getRecord(GAME_ID);
+    const body = document.getElementById('modal-body');
+    if (!history.length) { body.innerHTML = '<div class="modal-empty">还没有记录，快去挑战吧！🎮</div>'; }
+    else {
+      const bestHtml = best ? `<div style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:14px;font-weight:700;">🏆 最佳纪录</span><span style="font-size:20px;font-weight:800;">${best.label}</span></div>` : '';
+      body.innerHTML = bestHtml + history.map((h,i) => `<div class="history-row"><span class="h-rank">${MEDALS[i]||i+1}</span><span class="h-val">${h.label}</span><span class="h-date">${h.date}</span></div>`).join('');
+    }
+    document.getElementById('history-modal').classList.add('open');
+  }
+  function closeHistory(e) {
+    if (e && e.target !== document.getElementById('history-modal')) return;
+    document.getElementById('history-modal').classList.remove('open');
+  }
+</script>
+</body>
+</html>

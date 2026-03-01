@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>分数比大小 — 数学趣味游戏</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .frac-display { display:flex; align-items:center; justify-content:center; gap:24px; margin:12px 0; }
+    .frac-box { display:flex; flex-direction:column; align-items:center; gap:0; }
+    .frac-num { font-size:36px; font-weight:900; color:var(--primary-dark); line-height:1.1; }
+    .frac-line { width:50px; height:3px; background:var(--text); border-radius:2px; margin:2px 0; }
+    .frac-den { font-size:36px; font-weight:900; color:var(--primary-dark); line-height:1.1; }
+    .vs-badge { font-size:22px; font-weight:800; color:var(--muted); }
+    .cmp-btns { display:flex; gap:10px; }
+    .cmp-btn { flex:1; padding:16px; border-radius:14px; border:3px solid transparent; font-size:22px; font-weight:800; cursor:pointer; transition:all .2s; }
+    .cmp-btn.left  { background:#ede9fe; color:var(--primary-dark); border-color:var(--primary); }
+    .cmp-btn.right { background:#fce7f3; color:#be185d; border-color:#db2777; }
+    .cmp-btn.equal { background:#dcfce7; color:#16a34a; border-color:var(--success); }
+    .fb-flash { font-size:22px; font-weight:800; text-align:center; height:30px; line-height:30px; }
+    .fb-flash.ok { color:var(--success); } .fb-flash.no { color:var(--danger); }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="toast" id="toast"></div>
+  <div class="game-header">
+    <a class="btn-back" href="../index.html">← 返回</a>
+    <span class="game-header-title">½ 分数比大小</span>
+    <span class="score-badge" id="score-badge">0 题</span>
+  </div>
+  <div class="main-content">
+    <div class="game-area">
+
+      <div class="game-intro-card" id="intro-card">
+        <h2>½ 分数比大小</h2>
+        <p>快速判断两个分数的大小关系：<br>
+          左边大 / 相等 / 右边大。<br><br>
+          <strong>30秒</strong>内答对越多越好！<br>分母越大，判断越有挑战性。</p>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="openHistory()">📋 历史记录</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="startGame()">开始比较</button>
+        </div>
+      </div>
+
+      <div class="game-play-card hidden" id="play-card">
+        <div class="stats-row" style="margin-bottom:8px;">
+          <div class="stat-box"><div class="stat-val" id="time-left" style="color:var(--danger);">30</div><div class="stat-label">剩余秒</div></div>
+          <div class="stat-box"><div class="stat-val" id="correct-val">0</div><div class="stat-label">答对</div></div>
+          <div class="stat-box"><div class="stat-val" id="wrong-val" style="color:var(--danger);">0</div><div class="stat-label">答错</div></div>
+        </div>
+        <div class="timer-bar-wrap"><div class="timer-bar" id="timer-bar" style="width:100%;"></div></div>
+        <div class="frac-display" id="frac-display"></div>
+        <div class="fb-flash" id="fb-flash">&nbsp;</div>
+        <div class="cmp-btns">
+          <button class="cmp-btn left"  onclick="answer('left')">左大</button>
+          <button class="cmp-btn equal" onclick="answer('equal')">=</button>
+          <button class="cmp-btn right" onclick="answer('right')">右大</button>
+        </div>
+      </div>
+
+      <div class="game-result-card hidden" id="result-card">
+        <div class="result-title">⏰ 时间到！</div>
+        <div class="result-score" id="result-score">0</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:4px;">题</div>
+        <div class="result-record hidden" id="result-record">🏆 新纪录！</div>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="startGame()">再来</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="window.location.href='../index.html'">返回大厅</button>
+        </div>
+        <div class="mt16" id="history-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="modal-mask" id="history-modal" onclick="closeHistory(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header"><span class="modal-title">📋 历史记录</span><button class="modal-close" onclick="closeHistory()">✕</button></div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+</div>
+<script src="../js/storage.js"></script>
+<script>
+  const GAME_ID = 'fraction-compare';
+  const TOTAL = 30;
+  let correct=0, wrong=0, timeLeft=TOTAL, timerInterval=null;
+  let a1,b1,a2,b2,result;
+
+  function gcd(a,b){return b?gcd(b,a%b):a;}
+  function simplify(n,d){const g=gcd(Math.abs(n),d);return[n/g,d/g];}
+
+  function genFraction(){
+    const d1=Math.floor(Math.random()*11)+2; // 2-12
+    const n1=Math.floor(Math.random()*(d1-1))+1;
+    const d2=Math.floor(Math.random()*11)+2;
+    const n2=Math.floor(Math.random()*(d2-1))+1;
+    const [sa1,sb1]=simplify(n1,d1);
+    const [sa2,sb2]=simplify(n2,d2);
+    const v1=sa1/sb1, v2=sa2/sb2;
+    const res = Math.abs(v1-v2)<1e-10 ? 'equal' : v1>v2 ? 'left' : 'right';
+    return{a1:sa1,b1:sb1,a2:sa2,b2:sb2,result:res};
+  }
+
+  function startGame(){
+    correct=0;wrong=0;timeLeft=TOTAL;clearInterval(timerInterval);
+    ['correct-val','wrong-val'].forEach(id=>document.getElementById(id).textContent='0');
+    document.getElementById('time-left').textContent=TOTAL;
+    document.getElementById('timer-bar').style.width='100%';
+    document.getElementById('fb-flash').innerHTML='&nbsp;';
+    document.getElementById('score-badge').textContent='0 题';
+    document.getElementById('intro-card').classList.add('hidden');
+    document.getElementById('result-card').classList.add('hidden');
+    document.getElementById('play-card').classList.remove('hidden');
+    nextQuestion();
+    timerInterval=setInterval(()=>{
+      timeLeft--;document.getElementById('time-left').textContent=timeLeft;
+      document.getElementById('timer-bar').style.width=(timeLeft/TOTAL*100)+'%';
+      if(timeLeft<=0){clearInterval(timerInterval);endGame();}
+    },1000);
+  }
+
+  function nextQuestion(){
+    const q=genFraction();
+    a1=q.a1;b1=q.b1;a2=q.a2;b2=q.b2;result=q.result;
+    document.getElementById('frac-display').innerHTML=`
+      <div class="frac-box"><div class="frac-num">${a1}</div><div class="frac-line"></div><div class="frac-den">${b1}</div></div>
+      <span class="vs-badge">vs</span>
+      <div class="frac-box"><div class="frac-num">${a2}</div><div class="frac-line"></div><div class="frac-den">${b2}</div></div>`;
+  }
+
+  function answer(choice){
+    if(timeLeft<=0)return;
+    const fb=document.getElementById('fb-flash');
+    if(choice===result){
+      correct++;document.getElementById('correct-val').textContent=correct;
+      document.getElementById('score-badge').textContent=correct+' 题';
+      fb.textContent='✓ 正确！';fb.className='fb-flash ok';
+    }else{
+      wrong++;document.getElementById('wrong-val').textContent=wrong;
+      const ans=result==='left'?'左边大':result==='equal'?'相等':'右边大';
+      fb.textContent=`✗ 应是"${ans}"`;fb.className='fb-flash no';
+    }
+    setTimeout(()=>{fb.innerHTML='&nbsp;';fb.className='fb-flash';nextQuestion();},600);
+  }
+
+  function endGame(){
+    document.getElementById('play-card').classList.add('hidden');
+    document.getElementById('result-card').classList.remove('hidden');
+    document.getElementById('result-score').textContent=correct;
+    const isRecord=Storage.saveRecord(GAME_ID,{value:correct,label:`${correct}题`},'higher');
+    if(isRecord)document.getElementById('result-record').classList.remove('hidden');
+    const history=Storage.getHistory(GAME_ID);
+    if(history.length)document.getElementById('history-list').innerHTML='<div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted);">历史记录</div>'+history.slice(0,5).map(h=>`<div style="background:var(--bg);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;font-size:13px;"><span>${h.label}</span><span style="color:var(--muted)">${h.date}</span></div>`).join('');
+  }
+
+  const MEDALS=['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  function openHistory(){const h=Storage.getHistory(GAME_ID);const b=Storage.getRecord(GAME_ID);const body=document.getElementById('modal-body');if(!h.length){body.innerHTML='<div class="modal-empty">还没有记录！🎮</div>';}else{const bh=b?`<div style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:14px;font-weight:700;">🏆 最佳纪录</span><span style="font-size:20px;font-weight:800;">${b.label}</span></div>`:'';body.innerHTML=bh+h.map((x,i)=>`<div class="history-row"><span class="h-rank">${MEDALS[i]||i+1}</span><span class="h-val">${x.label}</span><span class="h-date">${x.date}</span></div>`).join('');}document.getElementById('history-modal').classList.add('open');}
+  function closeHistory(e){if(e&&e.target!==document.getElementById('history-modal'))return;document.getElementById('history-modal').classList.remove('open');}
+</script>
+</body>
+</html>

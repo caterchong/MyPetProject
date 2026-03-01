@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>角度估算 — 数学趣味游戏</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .canvas-wrap { text-align:center; margin:8px 0; }
+    canvas { border-radius:50%; background:#f8f9ff; }
+    .accuracy-badge { display:inline-block; padding:4px 14px; border-radius:99px; font-size:14px; font-weight:700; }
+    .round-dots { display:flex; gap:5px; justify-content:center; margin:6px 0; }
+    .rd { width:12px; height:12px; border-radius:50%; background:#e5e7eb; }
+    .rd.done { background:var(--success); }
+    .rd.current { background:var(--primary); }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="toast" id="toast"></div>
+  <div class="game-header">
+    <a class="btn-back" href="../index.html">← 返回</a>
+    <span class="game-header-title">📏 角度估算</span>
+    <span class="score-badge" id="score-badge">0 分</span>
+  </div>
+  <div class="main-content">
+    <div class="game-area">
+
+      <div class="game-intro-card" id="intro-card">
+        <h2>📏 角度估算</h2>
+        <p>观察图中的角，估算它的度数（0-360°）。<br><br>
+          误差越小，得分越高：<br>
+          误差 ≤5° → <strong>100分</strong><br>
+          误差 ≤15° → <strong>70分</strong><br>
+          误差 ≤30° → <strong>40分</strong><br><br>
+          共 <strong>10题</strong>！</p>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="openHistory()">📋 历史记录</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="startGame()">开始估算</button>
+        </div>
+      </div>
+
+      <div class="game-play-card hidden" id="play-card" style="padding:12px;">
+        <div class="round-dots" id="round-dots"></div>
+        <div class="stats-row" style="margin-bottom:6px;">
+          <div class="stat-box"><div class="stat-val" id="round-val">1</div><div class="stat-label">题次/10</div></div>
+          <div class="stat-box"><div class="stat-val" id="total-score">0</div><div class="stat-label">总分</div></div>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="angle-canvas" width="240" height="240"></canvas>
+        </div>
+        <div style="font-size:13px;color:var(--muted);text-align:center;margin:4px 0;" id="feedback-label">&nbsp;</div>
+        <div class="input-group">
+          <input class="game-input" id="angle-input" type="number" inputmode="numeric"
+                 min="0" max="360" placeholder="输入角度 (0-360)" autocomplete="off"
+                 onkeydown="if(event.key==='Enter')submitAngle()">
+          <button class="btn btn-primary" style="width:auto;padding:0 16px;" onclick="submitAngle()">确定</button>
+        </div>
+      </div>
+
+      <div class="game-result-card hidden" id="result-card">
+        <div class="result-title">📏 测量结束！</div>
+        <div class="result-score" id="result-score">0</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:4px;">/ 1000分</div>
+        <div class="result-record hidden" id="result-record">🏆 新纪录！</div>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="startGame()">再来</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="window.location.href='../index.html'">返回大厅</button>
+        </div>
+        <div class="mt16" id="history-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="modal-mask" id="history-modal" onclick="closeHistory(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header"><span class="modal-title">📋 历史记录</span><button class="modal-close" onclick="closeHistory()">✕</button></div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+</div>
+<script src="../js/storage.js"></script>
+<script>
+  const GAME_ID = 'angle-guess';
+  const TOTAL = 10;
+  let round=0, totalScore=0, targetAngle=0, results=[];
+
+  function drawAngle(deg){
+    const canvas=document.getElementById('angle-canvas');
+    const ctx=canvas.getContext('2d');
+    const W=canvas.width, H=canvas.height;
+    const cx=W/2, cy=H/2, r=90;
+    ctx.clearRect(0,0,W,H);
+    // Reference ray (right)
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+r,cy);
+    ctx.strokeStyle='#94a3b8';ctx.lineWidth=2;ctx.stroke();
+    // Angle ray
+    const rad=(360-deg)*Math.PI/180; // canvas y is flipped
+    ctx.beginPath();ctx.moveTo(cx,cy);
+    ctx.lineTo(cx+r*Math.cos(rad),cy+r*Math.sin(rad));
+    ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--primary').trim()||'#667eea';
+    ctx.lineWidth=3;ctx.stroke();
+    // Arc
+    ctx.beginPath();ctx.arc(cx,cy,40,0,-deg*Math.PI/180,true);
+    ctx.strokeStyle='#f093fb';ctx.lineWidth=2;ctx.stroke();
+    // Center dot
+    ctx.beginPath();ctx.arc(cx,cy,5,0,2*Math.PI);ctx.fillStyle='#475569';ctx.fill();
+    // Label
+    ctx.fillStyle='#475569';ctx.font='bold 13px sans-serif';ctx.textAlign='center';
+    ctx.fillText('0°',cx+r+12,cy+5);
+  }
+
+  function startGame(){
+    round=0;totalScore=0;results=[];
+    document.getElementById('intro-card').classList.add('hidden');
+    document.getElementById('result-card').classList.add('hidden');
+    document.getElementById('play-card').classList.remove('hidden');
+    nextRound();
+  }
+
+  function nextRound(){
+    round++;
+    targetAngle=Math.floor(Math.random()*350)+5; // 5-354
+    document.getElementById('round-val').textContent=round;
+    document.getElementById('total-score').textContent=totalScore;
+    document.getElementById('score-badge').textContent=totalScore+' 分';
+    document.getElementById('angle-input').value='';
+    document.getElementById('feedback-label').innerHTML='&nbsp;';
+    renderDots();
+    drawAngle(targetAngle);
+    setTimeout(()=>document.getElementById('angle-input').focus(),100);
+  }
+
+  function renderDots(){
+    document.getElementById('round-dots').innerHTML=Array.from({length:TOTAL},(_,i)=>{
+      const cls=i<round-1?'done':i===round-1?'current':'';
+      return `<div class="rd ${cls}"></div>`;
+    }).join('');
+  }
+
+  function submitAngle(){
+    const val=parseInt(document.getElementById('angle-input').value,10);
+    if(isNaN(val)||val<0||val>360){showToast('请输入0-360之间的整数');return;}
+    const diff=Math.min(Math.abs(val-targetAngle),360-Math.abs(val-targetAngle));
+    let pts=0;
+    if(diff<=5)pts=100;
+    else if(diff<=15)pts=70;
+    else if(diff<=30)pts=40;
+    else if(diff<=50)pts=15;
+    totalScore+=pts;
+    results.push({target:targetAngle,guess:val,diff,pts});
+
+    const fb=document.getElementById('feedback-label');
+    fb.textContent=`答案是 ${targetAngle}°，误差 ${diff}° → +${pts}分`;
+    // Show the correct angle
+    drawAngle(targetAngle);
+
+    setTimeout(()=>{
+      if(round>=TOTAL){endGame();}else{nextRound();}
+    },1200);
+  }
+
+  function endGame(){
+    document.getElementById('play-card').classList.add('hidden');
+    document.getElementById('result-card').classList.remove('hidden');
+    document.getElementById('result-score').textContent=totalScore;
+    const isRecord=Storage.saveRecord(GAME_ID,{value:totalScore,label:`${totalScore}分`},'higher');
+    if(isRecord)document.getElementById('result-record').classList.remove('hidden');
+    const history=Storage.getHistory(GAME_ID);
+    if(history.length)document.getElementById('history-list').innerHTML='<div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted);">历史记录</div>'+history.slice(0,5).map(h=>`<div style="background:var(--bg);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;font-size:13px;"><span>${h.label}</span><span style="color:var(--muted)">${h.date}</span></div>`).join('');
+  }
+
+  function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000);}
+  const MEDALS=['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  function openHistory(){const h=Storage.getHistory(GAME_ID);const b=Storage.getRecord(GAME_ID);const body=document.getElementById('modal-body');if(!h.length){body.innerHTML='<div class="modal-empty">还没有记录！🎮</div>';}else{const bh=b?`<div style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:14px;font-weight:700;">🏆 最佳纪录</span><span style="font-size:20px;font-weight:800;">${b.label}</span></div>`:'';body.innerHTML=bh+h.map((x,i)=>`<div class="history-row"><span class="h-rank">${MEDALS[i]||i+1}</span><span class="h-val">${x.label}</span><span class="h-date">${x.date}</span></div>`).join('');}document.getElementById('history-modal').classList.add('open');}
+  function closeHistory(e){if(e&&e.target!==document.getElementById('history-modal'))return;document.getElementById('history-modal').classList.remove('open');}
+</script>
+</body>
+</html>

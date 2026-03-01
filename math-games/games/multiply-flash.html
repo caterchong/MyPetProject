@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>乘法闪卡 — 数学趣味游戏</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .progress-row {
+      display: flex;
+      gap: 4px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin: 6px 0;
+    }
+    .progress-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #e5e7eb;
+    }
+    .progress-dot.correct { background: var(--success); }
+    .progress-dot.wrong   { background: var(--danger); }
+    .option-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .option-btn {
+      padding: 18px;
+      border-radius: 14px;
+      border: 2px solid #e5e7eb;
+      background: #fff;
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .option-btn:active { transform: scale(0.95); }
+    .option-btn.correct-choice {
+      border-color: var(--success);
+      background: #f0fdf4;
+      color: #16a34a;
+    }
+    .option-btn.wrong-choice {
+      border-color: var(--danger);
+      background: #fef2f2;
+      color: #dc2626;
+    }
+    .option-btn.reveal-correct {
+      border-color: var(--success);
+      background: #f0fdf4;
+    }
+    .speed-bar-wrap {
+      background: #e5e7eb;
+      border-radius: 99px;
+      height: 8px;
+      overflow: hidden;
+    }
+    .speed-bar {
+      height: 100%;
+      border-radius: 99px;
+      background: linear-gradient(90deg, var(--success), var(--warning), var(--danger));
+      transition: width 0.1s linear;
+    }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="toast" id="toast"></div>
+
+  <div class="game-header">
+    <a class="btn-back" href="../index.html">← 返回</a>
+    <span class="game-header-title">✖️ 乘法闪卡</span>
+    <span class="score-badge" id="score-badge">0 分</span>
+  </div>
+
+  <div class="main-content">
+    <div class="game-area">
+
+      <!-- 介绍 -->
+      <div class="game-intro-card" id="intro-card">
+        <h2>✖️ 乘法闪卡</h2>
+        <p>
+          共 <strong>20题</strong> 乘法，从4个选项中选出正确答案。<br>
+          答得越快，得分越高！<br><br>
+          答对基础分 10，剩余时间×0.5 额外加分。
+        </p>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="openHistory()">📋 历史记录</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="startGame()">开始！</button>
+        </div>
+      </div>
+
+      <!-- 游戏区 -->
+      <div class="game-play-card hidden" id="play-card">
+        <div class="stats-row" style="margin-bottom:8px;">
+          <div class="stat-box">
+            <div class="stat-val" id="q-num">1</div>
+            <div class="stat-label">第几题</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" id="score-val">0</div>
+            <div class="stat-label">得分</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" id="time-per-q" style="color:var(--danger);">10</div>
+            <div class="stat-label">倒计时</div>
+          </div>
+        </div>
+
+        <div class="speed-bar-wrap">
+          <div class="speed-bar" id="speed-bar" style="width:100%;"></div>
+        </div>
+
+        <div class="progress-row" id="progress-row"></div>
+
+        <div class="equation-display" id="equation">? × ? = ?</div>
+
+        <div class="option-grid" id="option-grid"></div>
+      </div>
+
+      <!-- 结果 -->
+      <div class="game-result-card hidden" id="result-card">
+        <div class="result-title">✖️ 答题结束！</div>
+        <div class="result-score" id="result-score">0</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:4px;">分</div>
+        <div class="result-record hidden" id="result-record">🏆 新纪录！</div>
+        <div class="stats-row" style="margin-bottom:16px;">
+          <div class="stat-box">
+            <div class="stat-val" id="res-correct" style="color:var(--success);">0</div>
+            <div class="stat-label">答对</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" id="res-wrong" style="color:var(--danger);">0</div>
+            <div class="stat-label">答错/超时</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" id="res-accuracy">-</div>
+            <div class="stat-label">正确率</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="startGame()">再来一局</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="window.location.href='../index.html'">返回大厅</button>
+        </div>
+        <div class="mt16" id="history-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 历史记录 Modal -->
+  <div class="modal-mask" id="history-modal" onclick="closeHistory(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <span class="modal-title">📋 历史记录</span>
+        <button class="modal-close" onclick="closeHistory()">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="../js/storage.js"></script>
+<script>
+  const GAME_ID = 'multiply-flash';
+  const TOTAL_Q = 20;
+  const TIME_PER_Q = 10;
+
+  let questions = [];
+  let qIndex = 0;
+  let score = 0;
+  let correctCount = 0, wrongCount = 0;
+  let qTimer = null;
+  let qTimeLeft = TIME_PER_Q;
+  let answered = false;
+  let results = []; // 'correct' | 'wrong'
+
+  function genQuestion() {
+    const a = Math.floor(Math.random() * 9) + 2;  // 2-10
+    const b = Math.floor(Math.random() * 9) + 2;
+    const ans = a * b;
+    // Generate 3 wrong options
+    const wrongs = new Set();
+    while (wrongs.size < 3) {
+      const delta = Math.floor(Math.random() * 5) + 1;
+      const w = ans + (Math.random() < 0.5 ? delta : -delta);
+      if (w > 0 && w !== ans) wrongs.add(w);
+    }
+    const options = shuffle([ans, ...wrongs]);
+    return { a, b, ans, options };
+  }
+
+  function shuffle(arr) {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function startGame() {
+    questions = Array.from({ length: TOTAL_Q }, genQuestion);
+    qIndex = 0; score = 0; correctCount = 0; wrongCount = 0; results = [];
+
+    document.getElementById('score-val').textContent = '0';
+    document.getElementById('score-badge').textContent = '0 分';
+
+    document.getElementById('intro-card').classList.add('hidden');
+    document.getElementById('result-card').classList.add('hidden');
+    document.getElementById('play-card').classList.remove('hidden');
+
+    renderProgress();
+    loadQuestion();
+  }
+
+  function renderProgress() {
+    const row = document.getElementById('progress-row');
+    row.innerHTML = Array.from({ length: TOTAL_Q }, (_, i) => {
+      const cls = results[i] ? (results[i] === 'correct' ? 'correct' : 'wrong') : '';
+      return `<div class="progress-dot ${cls}" id="dot-${i}"></div>`;
+    }).join('');
+  }
+
+  function loadQuestion() {
+    if (qIndex >= TOTAL_Q) { endGame(); return; }
+    const q = questions[qIndex];
+    answered = false;
+    qTimeLeft = TIME_PER_Q;
+
+    document.getElementById('q-num').textContent = qIndex + 1;
+    document.getElementById('equation').textContent = `${q.a} × ${q.b} = ?`;
+    document.getElementById('time-per-q').textContent = qTimeLeft;
+    document.getElementById('speed-bar').style.width = '100%';
+
+    const grid = document.getElementById('option-grid');
+    grid.innerHTML = q.options.map(opt => `
+      <button class="option-btn" onclick="selectOption(${opt})">${opt}</button>
+    `).join('');
+
+    clearInterval(qTimer);
+    qTimer = setInterval(() => {
+      qTimeLeft--;
+      document.getElementById('time-per-q').textContent = qTimeLeft;
+      document.getElementById('speed-bar').style.width = (qTimeLeft / TIME_PER_Q * 100) + '%';
+      if (qTimeLeft <= 0) {
+        clearInterval(qTimer);
+        handleTimeout();
+      }
+    }, 1000);
+  }
+
+  function selectOption(val) {
+    if (answered) return;
+    answered = true;
+    clearInterval(qTimer);
+
+    const q = questions[qIndex];
+    const btns = document.querySelectorAll('.option-btn');
+    btns.forEach(btn => {
+      const bVal = parseInt(btn.textContent, 10);
+      if (bVal === q.ans) btn.classList.add(val === q.ans ? 'correct-choice' : 'reveal-correct');
+      else if (bVal === val && val !== q.ans) btn.classList.add('wrong-choice');
+    });
+
+    if (val === q.ans) {
+      correctCount++;
+      const bonus = Math.round(qTimeLeft * 0.5);
+      score += 10 + bonus;
+      results[qIndex] = 'correct';
+    } else {
+      wrongCount++;
+      results[qIndex] = 'wrong';
+    }
+
+    document.getElementById('score-val').textContent = score;
+    document.getElementById('score-badge').textContent = score + ' 分';
+    document.getElementById('dot-' + qIndex).className = 'progress-dot ' + results[qIndex];
+
+    setTimeout(() => { qIndex++; loadQuestion(); }, 900);
+  }
+
+  function handleTimeout() {
+    if (answered) return;
+    answered = true;
+    const q = questions[qIndex];
+    const btns = document.querySelectorAll('.option-btn');
+    btns.forEach(btn => {
+      if (parseInt(btn.textContent, 10) === q.ans) btn.classList.add('reveal-correct');
+    });
+    wrongCount++;
+    results[qIndex] = 'wrong';
+    document.getElementById('dot-' + qIndex).className = 'progress-dot wrong';
+    setTimeout(() => { qIndex++; loadQuestion(); }, 900);
+  }
+
+  function endGame() {
+    document.getElementById('play-card').classList.add('hidden');
+    document.getElementById('result-card').classList.remove('hidden');
+
+    const total = correctCount + wrongCount;
+    const accuracy = total ? Math.round(correctCount / total * 100) + '%' : '-';
+
+    document.getElementById('result-score').textContent = score;
+    document.getElementById('res-correct').textContent = correctCount;
+    document.getElementById('res-wrong').textContent = wrongCount;
+    document.getElementById('res-accuracy').textContent = accuracy;
+
+    const isRecord = Storage.saveRecord(GAME_ID, { value: score, label: `${score}分` }, 'higher');
+    const recEl = document.getElementById('result-record');
+    if (isRecord) recEl.classList.remove('hidden'); else recEl.classList.add('hidden');
+
+    const history = Storage.getHistory(GAME_ID);
+    const listEl = document.getElementById('history-list');
+    if (history.length) {
+      listEl.innerHTML = '<div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted);">历史记录</div>' +
+        history.slice(0,5).map(h => `
+          <div style="background:var(--bg);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;font-size:13px;">
+            <span>${h.label}</span>
+            <span style="color:var(--muted)">${h.date}</span>
+          </div>`).join('');
+    }
+  }
+
+  // ===== History Modal =====
+  const MEDALS = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  function openHistory() {
+    const history = Storage.getHistory(GAME_ID);
+    const best = Storage.getRecord(GAME_ID);
+    const body = document.getElementById('modal-body');
+    if (!history.length) {
+      body.innerHTML = '<div class="modal-empty">还没有记录，快去挑战吧！🎮</div>';
+    } else {
+      const bestHtml = best
+        ? `<div style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:14px;font-weight:700;">🏆 最佳纪录</span>
+            <span style="font-size:20px;font-weight:800;">${best.label}</span>
+           </div>` : '';
+      const rows = history.map((h, i) => `
+        <div class="history-row">
+          <span class="h-rank">${MEDALS[i] || (i+1+'.')}</span>
+          <span class="h-val">${h.label}</span>
+          <span class="h-date">${h.date}</span>
+        </div>`).join('');
+      body.innerHTML = bestHtml + rows;
+    }
+    document.getElementById('history-modal').classList.add('open');
+  }
+  function closeHistory(e) {
+    if (e && e.target !== document.getElementById('history-modal')) return;
+    document.getElementById('history-modal').classList.remove('open');
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>猜数字 — 数学趣味游戏</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .range-bar-wrap {
+      position: relative;
+      height: 36px;
+      background: var(--bg);
+      border-radius: 99px;
+      margin: 4px 0;
+    }
+    .range-bar-fill {
+      position: absolute;
+      top: 0; bottom: 0;
+      background: linear-gradient(90deg, var(--primary), var(--accent));
+      border-radius: 99px;
+      transition: left 0.4s, right 0.4s;
+    }
+    .range-bar-labels {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 12px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .hint-arrow {
+      font-size: 48px;
+      text-align: center;
+      margin: 8px 0;
+      animation: bounce 0.5s ease;
+    }
+    @keyframes bounce {
+      0%,100% { transform: translateY(0); }
+      50%      { transform: translateY(-8px); }
+    }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="toast" id="toast"></div>
+
+  <div class="game-header">
+    <a class="btn-back" href="../index.html">← 返回</a>
+    <span class="game-header-title">🔢 猜数字</span>
+    <span class="score-badge" id="score-badge">第 0 次</span>
+  </div>
+
+  <div class="main-content">
+    <div class="game-area">
+
+      <!-- 介绍 -->
+      <div class="game-intro-card" id="intro-card">
+        <h2>🔢 猜数字</h2>
+        <p>
+          我想了一个 <strong>1 到 100</strong> 的数字。<br>
+          每次猜测，我会告诉你 <strong>大了还是小了</strong>。<br><br>
+          猜中所用次数越少，分数越高！<br>
+          最优解只需 <strong>7次</strong>（二分法）。
+        </p>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="openHistory()">📋 历史记录</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="startGame()">开始猜！</button>
+        </div>
+      </div>
+
+      <!-- 游戏区 -->
+      <div class="game-play-card hidden" id="play-card">
+        <div class="stats-row" style="margin-bottom:10px;">
+          <div class="stat-box">
+            <div class="stat-val" id="guess-count">0</div>
+            <div class="stat-label">已猜次数</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" id="range-min">1</div>
+            <div class="stat-label">下界</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" id="range-max">100</div>
+            <div class="stat-label">上界</div>
+          </div>
+        </div>
+
+        <div class="range-bar-wrap">
+          <div class="range-bar-fill" id="range-fill" style="left:0;right:0;"></div>
+          <div class="range-bar-labels">
+            <span id="bar-min">1</span>
+            <span id="bar-max">100</span>
+          </div>
+        </div>
+
+        <div class="hint-arrow" id="hint-arrow">🤔</div>
+        <div style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:8px;" id="hint-text">输入你的猜测</div>
+
+        <div class="input-group">
+          <input class="game-input" id="guess-input" type="number" inputmode="numeric"
+                 min="1" max="100" placeholder="1 ~ 100" autocomplete="off"
+                 onkeydown="handleKey(event)">
+          <button class="btn btn-primary" style="width:auto;padding:0 20px;" onclick="submitGuess()">猜！</button>
+        </div>
+
+        <div class="guess-history mt12" id="guess-history"></div>
+      </div>
+
+      <!-- 结果 -->
+      <div class="game-result-card hidden" id="result-card">
+        <div class="result-title" id="result-title">🎉 猜中了！</div>
+        <div class="result-score" id="result-score">0</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:4px;">次</div>
+        <div class="result-record hidden" id="result-record">🏆 新纪录！</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:16px;" id="result-comment"></div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="startGame()">再来一局</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="window.location.href='../index.html'">返回大厅</button>
+        </div>
+        <div class="mt16" id="history-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 历史记录 Modal -->
+  <div class="modal-mask" id="history-modal" onclick="closeHistory(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header">
+        <span class="modal-title">📋 历史记录</span>
+        <button class="modal-close" onclick="closeHistory()">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="../js/storage.js"></script>
+<script>
+  const GAME_ID = 'guess-number';
+  let secret = 0;
+  let guessCount = 0;
+  let lo = 1, hi = 100;
+  let guesses = [];
+
+  function startGame() {
+    secret = Math.floor(Math.random() * 100) + 1;
+    guessCount = 0; lo = 1; hi = 100; guesses = [];
+
+    document.getElementById('guess-count').textContent = '0';
+    document.getElementById('range-min').textContent = '1';
+    document.getElementById('range-max').textContent = '100';
+    updateBar(1, 100);
+    document.getElementById('hint-arrow').textContent = '🤔';
+    document.getElementById('hint-text').textContent = '输入你的猜测';
+    document.getElementById('guess-history').innerHTML = '';
+    document.getElementById('guess-input').value = '';
+    document.getElementById('score-badge').textContent = '第 0 次';
+
+    document.getElementById('intro-card').classList.add('hidden');
+    document.getElementById('result-card').classList.add('hidden');
+    document.getElementById('play-card').classList.remove('hidden');
+    document.getElementById('guess-input').focus();
+  }
+
+  function updateBar(lo, hi) {
+    const leftPct  = ((lo - 1) / 99 * 100).toFixed(1) + '%';
+    const rightPct = ((100 - hi) / 99 * 100).toFixed(1) + '%';
+    const fill = document.getElementById('range-fill');
+    fill.style.left  = leftPct;
+    fill.style.right = rightPct;
+    document.getElementById('bar-min').textContent = lo;
+    document.getElementById('bar-max').textContent = hi;
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter') submitGuess();
+  }
+
+  function submitGuess() {
+    const input = document.getElementById('guess-input');
+    const val = parseInt(input.value, 10);
+    if (isNaN(val) || val < 1 || val > 100) {
+      showToast('请输入 1-100 的整数');
+      return;
+    }
+    input.value = '';
+    guessCount++;
+    document.getElementById('guess-count').textContent = guessCount;
+    document.getElementById('score-badge').textContent = `第 ${guessCount} 次`;
+
+    if (val === secret) {
+      guesses.push({ val, result: 'hit' });
+      renderGuessHistory();
+      endGame(true);
+      return;
+    }
+
+    let hint;
+    if (val > secret) {
+      lo = lo; hi = Math.min(hi, val - 1);
+      hint = '⬇️ 猜小一点';
+      guesses.push({ val, result: 'high' });
+      document.getElementById('hint-arrow').textContent = '⬇️';
+    } else {
+      lo = Math.max(lo, val + 1); hi = hi;
+      hint = '⬆️ 猜大一点';
+      guesses.push({ val, result: 'low' });
+      document.getElementById('hint-arrow').textContent = '⬆️';
+    }
+
+    document.getElementById('hint-text').textContent = hint;
+    document.getElementById('range-min').textContent = lo;
+    document.getElementById('range-max').textContent = hi;
+    updateBar(lo, hi);
+    renderGuessHistory();
+    document.getElementById('guess-input').focus();
+  }
+
+  function renderGuessHistory() {
+    const el = document.getElementById('guess-history');
+    el.innerHTML = guesses.slice().reverse().map(g => {
+      const cls = g.result === 'hit' ? 'hit' : g.result === 'high' ? 'high' : 'low';
+      const label = g.result === 'hit' ? `${g.val} 🎯` : g.result === 'high' ? `${g.val} ↓` : `${g.val} ↑`;
+      return `<span class="guess-chip ${cls}">${label}</span>`;
+    }).join('');
+  }
+
+  function endGame(success) {
+    document.getElementById('play-card').classList.add('hidden');
+    document.getElementById('result-card').classList.remove('hidden');
+
+    document.getElementById('result-title').textContent = `🎉 是 ${secret}！猜中了！`;
+    document.getElementById('result-score').textContent = guessCount;
+
+    let comment = '';
+    if (guessCount <= 7) comment = '完美！达到最优解 👑';
+    else if (guessCount <= 10) comment = '不错，继续保持！';
+    else comment = '下次试试二分法，最多7次就能猜中！';
+    document.getElementById('result-comment').textContent = comment;
+
+    const isRecord = Storage.saveRecord(GAME_ID, { value: guessCount, label: `${guessCount}次` }, 'lower');
+    const recEl = document.getElementById('result-record');
+    if (isRecord) recEl.classList.remove('hidden'); else recEl.classList.add('hidden');
+
+    const history = Storage.getHistory(GAME_ID);
+    const listEl = document.getElementById('history-list');
+    if (history.length) {
+      listEl.innerHTML = '<div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted);">历史记录</div>' +
+        history.slice(0,5).map(h => `
+          <div style="background:var(--bg);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;font-size:13px;">
+            <span>${h.label}</span>
+            <span style="color:var(--muted)">${h.date}</span>
+          </div>`).join('');
+    }
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2000);
+  }
+
+  // ===== History Modal =====
+  const MEDALS = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  function openHistory() {
+    const history = Storage.getHistory(GAME_ID);
+    const best = Storage.getRecord(GAME_ID);
+    const body = document.getElementById('modal-body');
+    if (!history.length) {
+      body.innerHTML = '<div class="modal-empty">还没有记录，快去挑战吧！🎮</div>';
+    } else {
+      const bestHtml = best
+        ? `<div style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:14px;font-weight:700;">🏆 最佳纪录</span>
+            <span style="font-size:20px;font-weight:800;">${best.label}</span>
+           </div>` : '';
+      const rows = history.map((h, i) => `
+        <div class="history-row">
+          <span class="h-rank">${MEDALS[i] || (i+1+'.')}</span>
+          <span class="h-val">${h.label}</span>
+          <span class="h-date">${h.date}</span>
+        </div>`).join('');
+      body.innerHTML = bestHtml + rows;
+    }
+    document.getElementById('history-modal').classList.add('open');
+  }
+  function closeHistory(e) {
+    if (e && e.target !== document.getElementById('history-modal')) return;
+    document.getElementById('history-modal').classList.remove('open');
+  }
+</script>
+</body>
+</html>

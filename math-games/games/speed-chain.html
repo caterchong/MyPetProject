@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>速算接龙 — 数学趣味游戏</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .chain-display { font-size:36px; font-weight:900; text-align:center; color:var(--primary-dark); margin:8px 0; }
+    .chain-op { font-size:22px; font-weight:700; text-align:center; color:var(--muted); margin:2px 0; }
+    .chain-scroll { display:flex; gap:6px; overflow-x:auto; padding:4px 2px; margin:8px 0; scrollbar-width:none; }
+    .chain-scroll::-webkit-scrollbar{display:none;}
+    .chain-link { display:flex; flex-direction:column; align-items:center; gap:2px; flex-shrink:0; }
+    .chain-link-num { background:var(--primary); color:#fff; border-radius:8px; padding:4px 10px; font-size:14px; font-weight:700; }
+    .chain-link-arrow { font-size:18px; color:var(--muted); }
+    .chain-length { font-size:48px; font-weight:900; text-align:center; color:var(--primary); }
+    .lives-display { display:flex; gap:4px; justify-content:center; }
+    .life { font-size:22px; }
+  </style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="toast" id="toast"></div>
+  <div class="game-header">
+    <a class="btn-back" href="../index.html">← 返回</a>
+    <span class="game-header-title">⛓️ 速算接龙</span>
+    <span class="score-badge" id="score-badge">0 环</span>
+  </div>
+  <div class="main-content">
+    <div class="game-area">
+
+      <div class="game-intro-card" id="intro-card">
+        <h2>⛓️ 速算接龙</h2>
+        <p>每题的<strong>答案</strong>就是下一题的<strong>起始数</strong>，环环相扣！<br><br>
+          例如：<br>
+          <code>3 + 5 = 8</code>（接龙到8）<br>
+          <code>8 × 2 = 16</code>（接龙到16）<br><br>
+          答错3次游戏结束，看能接多长的龙！</p>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="openHistory()">📋 历史记录</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="startGame()">开始接龙</button>
+        </div>
+      </div>
+
+      <div class="game-play-card hidden" id="play-card">
+        <div class="stats-row" style="margin-bottom:6px;">
+          <div class="stat-box"><div class="stat-val" id="chain-val">0</div><div class="stat-label">接龙长度</div></div>
+          <div class="stat-box"><div class="lives-display" id="lives-display"></div><div class="stat-label">剩余命</div></div>
+        </div>
+        <div class="chain-display" id="current-num">?</div>
+        <div class="chain-op" id="chain-op-label">计算：? ? ? = ?</div>
+        <div class="chain-scroll" id="chain-scroll"></div>
+        <div class="input-group">
+          <input class="game-input" id="ans-input" type="number" inputmode="numeric"
+                 placeholder="输入答案" autocomplete="off" onkeydown="if(event.key==='Enter')submitAnswer()">
+          <button class="btn btn-primary" style="width:auto;padding:0 18px;" onclick="submitAnswer()">确定</button>
+        </div>
+      </div>
+
+      <div class="game-result-card hidden" id="result-card">
+        <div class="result-title">💥 游戏结束！</div>
+        <div class="chain-length" id="result-score">0</div>
+        <div style="font-size:14px;color:var(--muted);margin-bottom:4px;">环接龙</div>
+        <div class="result-record hidden" id="result-record">🏆 新纪录！</div>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="startGame()">再来</button>
+          <button class="btn btn-primary" style="flex:1;" onclick="window.location.href='../index.html'">返回大厅</button>
+        </div>
+        <div class="mt16" id="history-list"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="modal-mask" id="history-modal" onclick="closeHistory(event)">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-header"><span class="modal-title">📋 历史记录</span><button class="modal-close" onclick="closeHistory()">✕</button></div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+</div>
+<script src="../js/storage.js"></script>
+<script>
+  const GAME_ID = 'speed-chain';
+  let chainLen=0, lives=3, currentNum=0, answer=0, chainHistory=[];
+
+  const OPS = [
+    { label: '+', fn: (a,b)=>a+b },
+    { label: '−', fn: (a,b)=>a-b },
+    { label: '×', fn: (a,b)=>a*b },
+  ];
+
+  function genQuestion(start){
+    const ops=[...OPS];
+    // Avoid divide-by-zero or huge numbers; add ÷ sometimes
+    if(start>3 && start<=60 && Math.random()<0.3){
+      // find a divisor
+      for(let d=2;d<=Math.min(start,9);d++){
+        if(start%d===0){ops.push({label:'÷',fn:(a,b)=>a/b,b:d});break;}
+      }
+    }
+    const op=ops[Math.floor(Math.random()*ops.length)];
+    let b;
+    if(op.b!==undefined){b=op.b;}
+    else if(op.label==='+'){b=Math.floor(Math.random()*9)+1;}
+    else if(op.label==='−'){
+      // ensure result > 0
+      b=Math.floor(Math.random()*Math.min(start-1,9))+1;
+      if(start<=1)b=0;
+    }
+    else{b=Math.floor(Math.random()*4)+2;} // ×2-5
+    const result=op.fn(start,b);
+    return{op:op.label, b, result};
+  }
+
+  function startGame(){
+    chainLen=0;lives=3;chainHistory=[];
+    currentNum=Math.floor(Math.random()*10)+1;
+    document.getElementById('intro-card').classList.add('hidden');
+    document.getElementById('result-card').classList.add('hidden');
+    document.getElementById('play-card').classList.remove('hidden');
+    document.getElementById('chain-scroll').innerHTML='';
+    document.getElementById('chain-val').textContent='0';
+    document.getElementById('score-badge').textContent='0 环';
+    renderLives();
+    nextQuestion();
+  }
+
+  function renderLives(){
+    document.getElementById('lives-display').innerHTML='❤️'.repeat(lives)+'🖤'.repeat(3-lives);
+  }
+
+  function nextQuestion(){
+    const q=genQuestion(currentNum);
+    answer=q.result;
+    document.getElementById('current-num').textContent=currentNum;
+    document.getElementById('chain-op-label').textContent=`${currentNum} ${q.op} ${q.b} = ?`;
+    document.getElementById('ans-input').value='';
+    document.getElementById('ans-input').focus();
+  }
+
+  function submitAnswer(){
+    const val=parseInt(document.getElementById('ans-input').value,10);
+    if(isNaN(val))return;
+    if(val===answer){
+      chainLen++;
+      chainHistory.push(currentNum);
+      currentNum=answer;
+      document.getElementById('chain-val').textContent=chainLen;
+      document.getElementById('score-badge').textContent=chainLen+' 环';
+      addChainLink(currentNum);
+      nextQuestion();
+    }else{
+      lives--;renderLives();
+      showToast(`答案是 ${answer}！剩余 ${lives} 条命`);
+      const el=document.getElementById('chain-op-label');
+      el.classList.add('shake');setTimeout(()=>el.classList.remove('shake'),400);
+      document.getElementById('ans-input').value='';
+      if(lives<=0)setTimeout(endGame,600);
+    }
+  }
+
+  function addChainLink(num){
+    const scroll=document.getElementById('chain-scroll');
+    const link=document.createElement('div');
+    link.className='chain-link';
+    link.innerHTML=`<span class="chain-link-num">${num}</span><span class="chain-link-arrow">→</span>`;
+    scroll.appendChild(link);
+    scroll.scrollLeft=scroll.scrollWidth;
+  }
+
+  function endGame(){
+    document.getElementById('play-card').classList.add('hidden');
+    document.getElementById('result-card').classList.remove('hidden');
+    document.getElementById('result-score').textContent=chainLen;
+    const isRecord=Storage.saveRecord(GAME_ID,{value:chainLen,label:`${chainLen}环`},'higher');
+    if(isRecord)document.getElementById('result-record').classList.remove('hidden');
+    const history=Storage.getHistory(GAME_ID);
+    if(history.length)document.getElementById('history-list').innerHTML='<div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted);">历史记录</div>'+history.slice(0,5).map(h=>`<div style="background:var(--bg);border-radius:10px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;font-size:13px;"><span>${h.label}</span><span style="color:var(--muted)">${h.date}</span></div>`).join('');
+  }
+
+  function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000);}
+  const MEDALS=['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  function openHistory(){const h=Storage.getHistory(GAME_ID);const b=Storage.getRecord(GAME_ID);const body=document.getElementById('modal-body');if(!h.length){body.innerHTML='<div class="modal-empty">还没有记录！🎮</div>';}else{const bh=b?`<div style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;"><span style="font-size:14px;font-weight:700;">🏆 最佳纪录</span><span style="font-size:20px;font-weight:800;">${b.label}</span></div>`:'';body.innerHTML=bh+h.map((x,i)=>`<div class="history-row"><span class="h-rank">${MEDALS[i]||i+1}</span><span class="h-val">${x.label}</span><span class="h-date">${x.date}</span></div>`).join('');}document.getElementById('history-modal').classList.add('open');}
+  function closeHistory(e){if(e&&e.target!==document.getElementById('history-modal'))return;document.getElementById('history-modal').classList.remove('open');}
+</script>
+</body>
+</html>
